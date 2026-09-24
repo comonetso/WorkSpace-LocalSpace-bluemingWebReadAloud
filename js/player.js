@@ -307,11 +307,12 @@ function playAudio(urlPromise, options, playbackState$) {
     return playAudioOffscreen(urlPromise, options, playbackState$)
   }
   else {
-    //the bar's mute/volume state is read when the audio actually starts, not when the segment was queued
-    const volume = options.volume
-    options = Object.defineProperties({...options}, {
+    //the bar's mute/volume/rate state is read when the audio actually starts, not when the segment was queued
+    const volume = options.volume, rate = options.rate
+    options = Object.defineProperties({...options, startFraction: pageUiHost.takeStartFraction()}, {
       muted: {get: () => pageUiHost.isMuted(), enumerable: true},
       volume: {get: () => pageUiHost.liveVolume() ?? volume, enumerable: true},
+      rate: {get: () => pageUiHost.liveRate() ?? rate, enumerable: true},
     })
     return playAudioHere(requestAudioPlaybackPermission().then(() => urlPromise), options, playbackState$)
   }
@@ -339,15 +340,21 @@ async function createOffscreen() {
 
 let offscreenPlaySeq = 0
 
-//mute/volume state as of sending the audio to the offscreen document (the bar may change them while a segment loads)
+//mute/volume/rate state as of sending the audio to the offscreen document (the bar may change them while a segment loads)
 function withPlaybackState(options) {
-  return {...options, muted: pageUiHost.isMuted(), volume: pageUiHost.liveVolume() ?? options.volume}
+  return {
+    ...options,
+    muted: pageUiHost.isMuted(),
+    volume: pageUiHost.liveVolume() ?? options.volume,
+    rate: pageUiHost.liveRate() ?? options.rate,
+  }
 }
 
 function playAudioOffscreen(urlPromise, options, playbackState$) {
   //the offscreen document tags its events with this id, so late events of the previous audio are dropped
   const playId = ++offscreenPlaySeq
-  options = {...options, playId}
+  //startFraction: the segment is read again from where it was (settings changed on the page bar)
+  options = {...options, playId, startFraction: pageUiHost.takeStartFraction()}
   return rxjs.from(urlPromise).pipe(
     rxjs.exhaustMap(url =>
       playbackState$.pipe(

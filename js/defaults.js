@@ -782,7 +782,13 @@ function playAudioHere(urlPromise, options, playbackState$) {
         audio.defaultPlaybackRate = (options.rate || 1) * (options.rateAdjust || 1)
         audio.volume = options.volume || 1
         audio.muted = !!options.muted
-        audio.oncanplay = () => observer.next()
+        //read again from where it was (startFraction of the audio, js/page-ui-host.js): jump there once
+        let seekTo = options.startFraction
+        audio.oncanplay = () => {
+          if (seekTo > 0 && isFinite(audio.duration)) audio.currentTime = seekTo * audio.duration
+          seekTo = null
+          observer.next()
+        }
         audio.onerror = () => observer.error(new Error(audio.error.message || audio.error.code))
         audio.src = url
       })

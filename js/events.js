@@ -60,8 +60,8 @@ async function installContentScripts() {
 }
 
 /**
- * The green dot next to selected text (js/selection-button.js). It's turned on in the options, which
- * ask for access to all sites at that moment; the script is registered only while it's on and allowed.
+ * The green dot next to selected text (js/selection-button.js). On unless turned off in the options;
+ * it needs access to all sites (host_permissions), and is registered only while it's on and allowed.
  */
 const SELECTION_BUTTON_SCRIPT = {
   id: "selection-button",
@@ -74,14 +74,17 @@ const SELECTION_BUTTON_SCRIPT = {
 brapi.storage.onChanged.addListener(function(changes) {
   if (changes.selectionButton) syncSelectionButton(true)
 })
+//site access limited in the browser's extension settings: the dot pauses, and comes back with the access
 if (brapi.permissions.onRemoved) brapi.permissions.onRemoved.addListener(() => syncSelectionButton(false))
+if (brapi.permissions.onAdded) brapi.permissions.onAdded.addListener(() => syncSelectionButton(true))
 
 async function syncSelectionButton(injectOpenTabs) {
   try {
     const {selectionButton} = await getSettings(["selectionButton"])
+    const on = selectionButton !== false
     const granted = await brapi.permissions.contains({origins: config.selectionButtonOrigins})
     const registered = (await brapi.scripting.getRegisteredContentScripts({ids: [SELECTION_BUTTON_SCRIPT.id]})).length > 0
-    if (selectionButton && granted) {
+    if (on && granted) {
       if (registered) return
       await brapi.scripting.registerContentScripts([SELECTION_BUTTON_SCRIPT])
       //pages opened before it was turned on get it too
@@ -95,8 +98,15 @@ async function syncSelectionButton(injectOpenTabs) {
     }
     else {
       if (registered) await brapi.scripting.unregisterContentScripts({ids: [SELECTION_BUTTON_SCRIPT.id]})
-      //site access was taken away in the browser's extension settings: the option shows as off
-      if (selectionButton && !granted) await updateSettings({selectionButton: false})
+      //site access limited: pages that have the dot stop showing it too (turned off in the options,
+      //they see the setting change themselves)
+      if (on && !granted) {
+        const tabs = await brapi.tabs.query({})
+        for (const tab of tabs) {
+          brapi.tabs.sendMessage(tab.id, {dest: "selectionButton", method: "pause"})
+            .catch(() => {})
+        }
+      }
     }
   }
   catch (err) {

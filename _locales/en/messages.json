@@ -225,7 +225,7 @@
     "message": "Off"
   },
   "options_selection_button_on": {
-    "message": "On (needs access to all sites)"
+    "message": "On"
   },
   "selection_button_title": {
     "message": "Read the selected text"

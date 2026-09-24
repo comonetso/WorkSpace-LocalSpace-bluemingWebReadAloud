@@ -395,7 +395,7 @@
       //released where it started gives no change event: the next update shows the current value again
       input.addEventListener("pointerup", () => editing[key] = false)
       input.addEventListener("blur", () => editing[key] = false)
-      return h("label", {class: "row"}, [h("span", {class: "name"}, [p.label()]), input, value])
+      return els[key + "Row"] = h("label", {class: "row"}, [h("span", {class: "name"}, [p.label()]), input, value])
     }
 
     function togglePanel(open = els.panel.hidden) {
@@ -451,6 +451,8 @@
     els.prev.disabled = els.next.disabled = !navigable
     els.mute.hidden = !msg.canMute
     setIcon(els.mute, msg.muted ? ICONS.muted : ICONS.volume, msg.muted ? message("pagebar_unmute", "음소거 해제") : message("pagebar_mute", "음소거"))
+    //the voice being read ignores the pitch (most online voices)
+    els.pitchRow.hidden = msg.usesPitch === false
     renderParams(msg.params)
   }
 

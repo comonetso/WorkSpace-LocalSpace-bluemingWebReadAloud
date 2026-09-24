@@ -32,11 +32,11 @@
   ],
   "host_permissions": [
     "https://translate.google.com/",
-    "https://naveropenapi.apigw.ntruss.com/"
+    "https://naveropenapi.apigw.ntruss.com/",
+    "http://*/",
+    "https://*/"
   ],
   "optional_host_permissions": [
-    "http://*/",
-    "https://*/",
     "file://*/*"
   ],
   "cross_origin_opener_policy": {

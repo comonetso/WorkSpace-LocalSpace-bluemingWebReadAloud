@@ -216,8 +216,9 @@
 
 
 
-  //selectionButton: green dot next to selected text (js/selection-button.js); it runs on every page,
-  //so turning it on asks for access to all sites. The service worker registers it (syncSelectionButton)
+  //selectionButton: green dot next to selected text (js/selection-button.js), on unless turned off here.
+  //It runs on every page: turning it on asks again for access to all sites in case the browser's extension
+  //settings limited it. The service worker registers it (syncSelectionButton)
   domReadyPromise
     .then(() => {
       $("#selection-button")
@@ -233,7 +234,7 @@
 
   rxjs.combineLatest([observeSetting("selectionButton"), domReadyPromise])
     .subscribe(([selectionButton]) => {
-      $("#selection-button").val(selectionButton ? "true" : "false")
+      $("#selection-button").val(selectionButton !== false ? "true" : "false")
     })
 
 

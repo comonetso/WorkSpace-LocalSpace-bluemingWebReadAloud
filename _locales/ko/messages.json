@@ -48,7 +48,7 @@
     "message": "끄기"
   },
   "options_selection_button_on": {
-    "message": "켜기 (모든 사이트 접근 허용 필요)"
+    "message": "켜기"
   },
   "selection_button_title": {
     "message": "선택한 글 읽기"

@@ -582,21 +582,34 @@ function AmazonPollyTtsEngine() {
 
 
 function GoogleWavenetTtsEngine() {
-  var prefetchAudio;
+  //audio made ahead, newest first: the next segment, and the current one when a new pitch makes it again
+  //(Speech.prepareSegment) — two, so neither pushes the other out
+  var prefetched = [];
+  var prefetchSeq = 0;
   this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(function() {
-        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
-        else return getAudioUrl(utterance, options.voice, options.pitch);
+        const hit = prefetched.find(e => e.utterance == utterance && e.options == options)
+        return hit ? hit.url : getAudioUrl(utterance, options.voice, options.pitch);
       })
     return playAudio(urlPromise, options, playbackState$)
   };
+  //resolves true once speak() can use the audio, false if it couldn't be made
   this.prefetch = function(utterance, options) {
-    getAudioUrl(utterance, options.voice, options.pitch)
+    if (prefetched.some(e => e.utterance == utterance && e.options == options)) return Promise.resolve(true)
+    const seq = ++prefetchSeq
+    return getAudioUrl(utterance, options.voice, options.pitch)
       .then(function(url) {
-        prefetchAudio = [utterance, options, url];
+        //an earlier request for the same text finishing late doesn't replace a newer one
+        const same = prefetched.find(e => e.utterance == utterance)
+        if (same && same.seq > seq) return false
+        prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
+        return true
       })
-      .catch(console.error)
+      .catch(function(err) {
+        console.error(err)
+        return false
+      })
   };
   this.getVoices = function() {
     return getSettings(["wavenetVoices", "gcpCreds"])
@@ -1033,22 +1046,33 @@ function OpenaiTtsEngine() {
 
 
 function NaverClovaTtsEngine() {
-  var prefetchAudio;
+  //audio made ahead, newest first: the next segment, and the current one when a new pitch makes it again
+  //(Speech.prepareSegment) — two, so neither pushes the other out
+  var prefetched = [];
+  var prefetchSeq = 0;
   this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(() => {
-        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
-        else return getAudioUrl(utterance, options.lang, options.voice, options)
+        const hit = prefetched.find(e => e.utterance == utterance && e.options == options)
+        return hit ? hit.url : getAudioUrl(utterance, options.lang, options.voice, options)
       })
     return playAudio(urlPromise, options, playbackState$)
   };
+  //resolves true once speak() can use the audio, false if it couldn't be made
   this.prefetch = async function(utterance, options) {
+    if (prefetched.some(e => e.utterance == utterance && e.options == options)) return true
+    const seq = ++prefetchSeq
     try {
       const url = await getAudioUrl(utterance, options.lang, options.voice, options)
-      prefetchAudio = [utterance, options, url]
+      //an earlier request for the same text finishing late doesn't replace a newer one
+      const same = prefetched.find(e => e.utterance == utterance)
+      if (same && same.seq > seq) return false
+      prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
+      return true
     }
     catch (err) {
       console.error(err)
+      return false
     }
   };
   this.getVoices = async function() {
@@ -1144,39 +1168,18 @@ function NaverClovaTtsEngine() {
 
     if (!voiceInfo) throw new Error(`Voice not found: ${voice.voiceName}`);
 
-    // options에서 필요한 값 가져오기
+    // 속도·볼륨은 틀 때(오디오 재생 배속·볼륨, js/defaults.js playAudioHere) 적용한다.
+    // 합성은 보통 속도(speed 0)·최대 음량(volume 5 = 1.5배, 예전 기본 볼륨 1.0 의 값)으로 고정해,
+    // 재생 바에서 속도·볼륨을 바꿔도 다시 합성하지 않고 그 자리에서 바뀐다 (2026-09-24 사용자 결정)
+    const speed = 0;
+    const volume = 5;
     let pitch = 0;
-    let speed = 0;
-    let volume = 0;
 
-    // options 객체에서 값 추출
-    if (options) {
-      if (options.pitch) {
-        // pitch 범위: 0.5 ~ 1.5 => 5 ~ -5로 변환 (API: -5 = 1.2배 높게, 5 = 0.8배 낮게)
-        pitch = Math.round((1 - options.pitch) * 10);
-        // 범위 제한
-        pitch = Math.max(-5, Math.min(5, pitch));
-      }
-
-      if (options.rate) {
-        // rate 범위: 0.1 ~ 10 => -5 ~ 5로 변환 (API 예제에 맞춰 범위 수정)
-        if (options.rate <= 1) {
-          // 느린 속도: 1 ~ 0.1 => 0 ~ -5
-          speed = Math.round((1 - options.rate) * -5);
-        } else {
-          // 빠른 속도: 1 ~ 10 => 0 ~ 5
-          speed = Math.min(5, Math.round(options.rate - 1));
-        }
-        // 범위 제한
-        speed = Math.max(-5, Math.min(5, speed));
-      }
-
-      if (options.volume) {
-        // volume 범위: 0 ~ 1 => -5 ~ 5로 변환
-        volume = Math.round((options.volume - 0.5) * 10);
-        // 범위 제한
-        volume = Math.max(-5, Math.min(5, volume));
-      }
+    if (options && options.pitch) {
+      // pitch 범위: 0.5 ~ 1.5 => 5 ~ -5로 변환 (API: -5 = 1.2배 높게, 5 = 0.8배 낮게)
+      pitch = Math.round((1 - options.pitch) * 10);
+      // 범위 제한
+      pitch = Math.max(-5, Math.min(5, pitch));
     }
 
     // API URL 확인 - 기본 URL이 /tts로 끝나지 않으면 추가

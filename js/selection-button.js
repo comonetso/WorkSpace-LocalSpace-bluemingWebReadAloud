@@ -1,6 +1,6 @@
 /*
  * A small green dot shown next to selected text; clicking it reads the selection, the same as the
- * context menu's "Read selection". Turned on in the options, registered on every page by
+ * context menu's "Read selection". On unless turned off in the options, registered on every page by
  * syncSelectionButton() in js/events.js.
  */
 (function() {
@@ -29,8 +29,14 @@
     window[method]("scroll", reposition, true)
     window[method]("resize", reposition)
     try {
-      if (on) brapi.storage.onChanged.addListener(onSettingsChanged)
-      else brapi.storage.onChanged.removeListener(onSettingsChanged)
+      if (on) {
+        brapi.storage.onChanged.addListener(onSettingsChanged)
+        brapi.runtime.onMessage.addListener(onMessage)
+      }
+      else {
+        brapi.storage.onChanged.removeListener(onSettingsChanged)
+        brapi.runtime.onMessage.removeListener(onMessage)
+      }
     }
     catch (err) {}
   }
@@ -49,11 +55,21 @@
     clearTimeout(pending)
     if (button) button.host.remove()
     button = null
+    //turned on again later: the script injected into this page then starts over
+    if (window.__readAloudHrgSelectionButton && window.__readAloudHrgSelectionButton.destroy == destroy) {
+      delete window.__readAloudHrgSelectionButton
+    }
   }
 
   //turned off in the options: pages that already have it stop showing it
   function onSettingsChanged(changes) {
-    if (changes.selectionButton && !changes.selectionButton.newValue) destroy()
+    if (changes.selectionButton && changes.selectionButton.newValue === false) destroy()
+  }
+
+  //site access limited in the browser's extension settings (syncSelectionButton() in js/events.js);
+  //given back, the script is injected again
+  function onMessage(message) {
+    if (message && message.dest == "selectionButton" && message.method == "pause") destroy()
   }
 
   function onSelectionMaybeChanged(event) {

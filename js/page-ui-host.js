@@ -20,8 +20,16 @@ const pageUiHost = immediate(() => {
     detachDoc,
     noteSkip,
     isMuted: () => muted,
-    //volume changed in place from the bar: audio queued before the change must start with it too
+    //volume/rate changed in place from the bar: audio queued before the change must start with it too
     liveVolume: () => session && session.liveVolume != null ? session.liveVolume : null,
+    liveRate: () => session && session.liveRate != null ? session.liveRate : null,
+    //set just before the current segment is read again from where it was (swapSegment); taken by the
+    //playAudio() call that restart makes, so no other audio gets it
+    takeStartFraction() {
+      const fraction = session ? session.startFraction : null
+      if (session) session.startFraction = null
+      return fraction ?? null
+    },
   }
 
 
@@ -47,6 +55,10 @@ const pageUiHost = immediate(() => {
       tick: null,
       params: null,
       liveVolume: null,
+      liveRate: null,
+      startFraction: null,
+      carryOnLoad: false,
+      swapToken: null,
     }
     return true
   }
@@ -156,6 +168,10 @@ const pageUiHost = immediate(() => {
     s.speech = speech
     s.canMute = speech.canMute
     s.timing.setAudioBased(speech.reportsAudioTime)
+    //a new speech (next page) starts with the saved values, which include what the bar changed
+    s.liveVolume = s.liveRate = null
+    s.carryOnLoad = false
+    s.swapToken = null
     s.word = null
     s.segTexts = null
     updateSegments(speech.getInfo().texts)
@@ -196,19 +212,57 @@ const pageUiHost = immediate(() => {
     s.params = {...s.params, ...applied}
     const speech = s.speech
     if (speech && speech.appliesParamsLive) {
-      if (applied.rate == null && applied.pitch == null && speech.canMute && !speech.bakesVolume) {
-        //audio playback can change its volume in place, no need to read again
-        s.liveVolume = applied.volume
-        speech.setParams(applied, {restart: false})
-        setOutputVolume(applied.volume)
+      const inPlace = {}, remade = {}
+      for (const key in applied) {
+        //rate/volume of audio files change on the audio element; a pitch the voice ignores changes nothing
+        if (key == "pitch" ? !speech.usesPitch : speech.changesRateVolumeInPlace) inPlace[key] = applied[key]
+        else remade[key] = applied[key]
       }
-      else {
-        s.liveVolume = null
-        if (applied.rate != null) s.timing.markRateChanged()
-        speech.setParams(applied, {restart: true})
+      if (Object.keys(inPlace).length) {
+        speech.updateParams(inPlace)
+        if (inPlace.rate != null) setOutputRate(s, inPlace.rate)
+        if (inPlace.volume != null) {
+          s.liveVolume = inPlace.volume
+          setOutputVolume(inPlace.volume)
+        }
+      }
+      if (Object.keys(remade).length) {
+        if (remade.rate != null) s.timing.markRateChanged()
+        speech.setParams(remade)
+        if (speech.isMovePending()) {
+          //next/previous is about to move: read the segment it goes to from its start, with the new values
+          s.swapToken = null
+          s.carryOnLoad = false
+          speech.restartSegment()
+        }
+        else if (speech.reportsAudioTime) swapSegment(s, speech).catch(console.error)
+        else restartFromWord(s, speech)
       }
     }
     pushBar()
+  }
+
+  //audio files: the old audio plays on while the current segment is made again with the new values,
+  //then the new audio goes on from the same point
+  async function swapSegment(s, speech) {
+    const token = s.swapToken = {}
+    const index = s.timing.current()
+    const ready = await speech.prepareSegment()
+    //not made (the old audio plays on, the next segment gets the new values), or a newer change,
+    //another segment, or another reading since then
+    if (!ready || session != s || s.speech != speech || s.swapToken != token || s.timing.current() != index) return
+    s.startFraction = s.timing.audioFraction()
+    s.carryOnLoad = true
+    speech.restartSegment({carryOn: true})
+    s.startFraction = null
+  }
+
+  //built-in voices take the values only when they start speaking, but start quickly: from the word being read
+  function restartFromWord(s, speech) {
+    s.swapToken = null
+    const fromChar = s.word && s.word.index == s.timing.current() ? s.word.charIndex : 0
+    s.carryOnLoad = fromChar > 0
+    speech.restartSegment({fromChar, carryOn: fromChar > 0})
   }
 
   function onState(state) {
@@ -231,12 +285,16 @@ const pageUiHost = immediate(() => {
     if (index != s.timing.current()) {
       s.timing.switchTo(index, event.type == "sentence")
       s.word = null
+      s.carryOnLoad = false
       changed = true
     }
     else if (event.type == "load") {
-      //same segment started over (rewind within the first seconds)
-      s.timing.restartCurrent()
-      s.word = null
+      //same segment started over: from its start (rewind within the first seconds), or from where it was
+      //when the settings changed (swapSegment/restartFromWord), the time going on
+      const keep = s.carryOnLoad
+      s.carryOnLoad = false
+      s.timing.restartCurrent(keep)
+      if (!keep) s.word = null
     }
     if (event.type == "time" && s.timing.onAudioTime(event)) changed = true
     if (event.type == "word") s.word = {index, charIndex: event.charIndex, length: event.length}
@@ -305,6 +363,8 @@ const pageUiHost = immediate(() => {
       canMute: s.canMute,
       muted,
       params: s.params,
+      //voices that ignore the pitch get no pitch slider
+      usesPitch: s.speech ? s.speech.usesPitch : true,
     })
   }
 
@@ -325,11 +385,21 @@ const pageUiHost = immediate(() => {
   }
 
 
-  //mute / volume ----------------------------------------------------------------
+  //mute / volume / rate -------------------------------------------------------------
 
   function setOutputVolume(volume) {
     getSingletonAudio().volume = volume
     if (brapi.offscreen) sendToOffscreen({method: "setVolume", args: [volume]}).catch(() => {})
+  }
+
+  function setOutputRate(s, rate) {
+    s.liveRate = rate
+    //the rate the audio actually plays at, as playAudioHere() sets it (rateAdjust: Google Translate voices)
+    const actual = rate * (s.speech.options.rateAdjust || 1)
+    s.timing.changeRate(actual)
+    const audio = getSingletonAudio()
+    audio.defaultPlaybackRate = audio.playbackRate = actual
+    if (brapi.offscreen) sendToOffscreen({method: "setRate", args: [rate]}).catch(() => {})
   }
 
   function setMuted(value) {
@@ -351,6 +421,8 @@ const pageUiHost = immediate(() => {
  * A segment's real duration is known either from its audio file (online voices) or after
  * it has been read to the end (built-in voices). Unknown segments are estimated with the
  * average speed of everything measured so far; until something is measured the total is null.
+ * The rate can change partway through a segment, and a segment can be read again from where it
+ * was (settings changed on the page bar): its time is then counted in stretches, see `audio`.
  */
 function makePlaybackTiming() {
   let segs = []
@@ -358,7 +430,14 @@ function makePlaybackTiming() {
   let cur = 0
   let segWall = 0, segSince = null        //playing time spent in the current segment (ms)
   let allWall = 0, allSince = null        //playing time over the whole session (ms)
-  let audio = null                        //{currentTime, duration, rate, at} of the current segment
+  //the current segment's audio: {currentTime, duration, rate, at} as last reported, plus the stretch played
+  //at this rate: it began at audio position pos0, sec0 seconds into the segment (0 unless the rate changed
+  //in place or the segment was read again from where it was)
+  let audio = null
+  let carry = null                        //seconds played before the segment was read again from where it was
+  let carryFraction = null                //and how far into its audio (0-1), until the new audio reports
+  let rateSwitch = false                  //rate changed in place: events sent at the old rate may still arrive
+  let curRate = null                      //the audio's playback rate now (audio files)
   let audioBased = false                  //segments report their audio position; before it arrives nothing is playing yet
   let endPending = false, skipPending = false
 
@@ -366,10 +445,15 @@ function makePlaybackTiming() {
   const segPlayed = () => segWall + (segSince != null ? now() - segSince : 0)
   const allPlayed = () => allWall + (allSince != null ? now() - allSince : 0)
   //audio position, moved forward by the playing time since the last "time" event
-  const audioPlayed = () => {
+  const audioPos = () => {
     const since = segSince != null ? now() - Math.max(audio.at, segSince) : 0
-    return Math.min(audio.duration, audio.currentTime + Math.max(0, since) / 1000 * audio.rate) / audio.rate
+    return Math.min(audio.duration, audio.currentTime + Math.max(0, since) / 1000 * audio.rate)
   }
+  const audioPlayed = () => audio.sec0 + Math.max(0, audioPos() - audio.pos0) / audio.rate
+  const audioSegmentSec = () => audio.sec0 + Math.max(0, audio.duration - audio.pos0) / audio.rate
+  //how far into the current segment's audio (0-1), null before its position is known
+  const audioFraction = () => audio ? audioPos() / audio.duration : carryFraction
+  const sameRate = (a, b) => Math.abs(a - b) < 1e-6
 
   return {
     setSegments(texts) {
@@ -385,7 +469,7 @@ function makePlaybackTiming() {
       }
       else if (!playing && segSince != null) {
         //keep the interpolated audio position, so the clock doesn't jump back when pausing
-        if (audio) audio = {...audio, currentTime: audioPlayed() * audio.rate, at: now()}
+        if (audio) audio = {...audio, currentTime: audioPos(), at: now()}
         segWall += now() - segSince
         allWall += now() - allSince
         segSince = allSince = null
@@ -401,8 +485,8 @@ function makePlaybackTiming() {
     markSkipped() {
       skipPending = true
     },
-    //the rate changed: segments already read keep their real time for "elapsed" but no longer
-    //tell the speed, and the rest (current one included) will be measured again
+    //the rate of a built-in voice changed: segments already read keep their real time for "elapsed" but
+    //no longer tell the speed, and the rest will be measured again
     markRateChanged() {
       const speed = measuredSpeed()
       segs.forEach((seg, i) => {
@@ -413,6 +497,8 @@ function makePlaybackTiming() {
         }
         else seg.sec = null
       })
+      //if it goes on from where it was (restartCurrent(true)) its time mixes both rates
+      if (segs[cur]) segs[cur].mixed = true
     },
     switchTo(index, endedBySentence) {
       const seg = segs[cur]
@@ -420,23 +506,66 @@ function makePlaybackTiming() {
         const played = segPlayed() / 1000
         if (played > 0) {
           seg.sec = played
-          seg.oldRate = false
+          //read at two rates: its time counts for "elapsed", but it doesn't tell the speed
+          seg.oldRate = !!seg.mixed
         }
       }
       cur = index
       resetSegment()
     },
-    restartCurrent() {
-      resetSegment()
+    //the current segment is read again: from its start, or (keepPlayed) from where it was, the time going on
+    restartCurrent(keepPlayed) {
+      if (!keepPlayed) return resetSegment()
+      //built-in voices: the wall clock of the segment just keeps running
+      if (audioBased) {
+        if (audio) {
+          carry = audioPlayed()
+          carryFraction = audioPos() / audio.duration
+        }
+        //nothing played yet: it's read from its start
+        else if (carryFraction == null) carry = 0
+        audio = null
+        rateSwitch = false
+      }
     },
+    //the audio element's rate changed in place: what was played so far stays, the rest goes at the new rate
+    changeRate(rate) {
+      //skipped segments keep their estimate at the old rate, so "elapsed" doesn't jump
+      const speed = measuredSpeed()
+      if (speed) segs.forEach((seg, i) => {
+        if (i < cur && seg.sec == null) seg.sec = seg.chars / speed
+      })
+      curRate = rate
+      if (!audio || sameRate(rate, audio.rate)) return
+      const pos = audioPos(), played = audioPlayed()
+      audio = {...audio, currentTime: pos, at: now(), pos0: pos, sec0: played, rate}
+      rateSwitch = true
+      if (segs[cur]) segs[cur].sec = audioSegmentSec()
+    },
+    audioFraction,
     onAudioTime(event) {
       if (!(event.duration > 0) || !isFinite(event.duration)) return false
       const rate = event.rate > 0 ? event.rate : 1
+      if (audio && rateSwitch) {
+        //sent before the new rate reached the audio: its position doesn't belong to the new stretch
+        if (!sameRate(rate, audio.rate)) return false
+        rateSwitch = false
+      }
       const first = !audio
-      audio = {currentTime: event.currentTime, duration: event.duration, rate, at: now()}
+      if (first) {
+        //read again from where it was: this audio starts partway, at the time already played
+        audio = {pos0: carry != null ? event.currentTime : 0, sec0: carry || 0, rate}
+        carry = carryFraction = null
+      }
+      else if (!sameRate(rate, audio.rate)) {
+        //the rate changed without changeRate(): a new stretch from here
+        audio = {...audio, pos0: event.currentTime, sec0: audioPlayed(), rate}
+      }
+      audio = {...audio, currentTime: event.currentTime, duration: event.duration, at: now()}
+      curRate = rate
       if (segs[cur]) {
-        segs[cur].sec = event.duration / rate
-        segs[cur].oldRate = false
+        segs[cur].sec = audioSegmentSec()
+        segs[cur].dur = event.duration
       }
       return first
     },
@@ -444,7 +573,7 @@ function makePlaybackTiming() {
       if (!singlePage) return {elapsed: allPlayed() / 1000, total: null, progress: null}
       const speed = measuredSpeed()
       const estimate = i => segs[i].sec != null ? segs[i].sec : speed ? segs[i].chars / speed : 0
-      const curPlayed = audio ? audioPlayed() : audioBased ? 0 : segPlayed() / 1000
+      const curPlayed = audio ? audioPlayed() : audioBased ? carry || 0 : segPlayed() / 1000
       let before = 0, charsBefore = 0
       for (let i = 0; i < cur && i < segs.length; i++) {
         before += estimate(i)
@@ -458,19 +587,21 @@ function makePlaybackTiming() {
       }
       let progress
       if (total) progress = Math.min(1, elapsed / total)
-      else if (totalChars) progress = (charsBefore + (audio ? audio.currentTime / audio.duration : 0) * (segs[cur] ? segs[cur].chars : 0)) / totalChars
+      else if (totalChars) progress = (charsBefore + (audioFraction() || 0) * (segs[cur] ? segs[cur].chars : 0)) / totalChars
       else progress = 0
       return {elapsed, total, progress}
     },
   }
 
-  //average speed (chars/s) of the segments measured at the current rate
+  //average speed (chars/s) at the current rate. Audio files: from their length, which doesn't depend on the
+  //rate they're played at, so a rate change doesn't lose what was measured. Built-in voices: from the
+  //segments read to the end at the current rate
   function measuredSpeed() {
     let knownChars = 0, knownSec = 0
     for (const seg of segs) {
-      if (seg.sec > 0 && !seg.oldRate) {
+      if (audioBased ? seg.dur > 0 : seg.sec > 0 && !seg.oldRate) {
         knownChars += seg.chars
-        knownSec += seg.sec
+        knownSec += audioBased ? seg.dur / (curRate || 1) : seg.sec
       }
     }
     return knownChars > 0 ? knownChars / knownSec : null
@@ -480,7 +611,10 @@ function makePlaybackTiming() {
     segWall = 0
     if (segSince != null) segSince = now()
     audio = null
+    carry = carryFraction = null
+    rateSwitch = false
     endPending = skipPending = false
+    if (segs[cur]) segs[cur].mixed = false
   }
 }
 

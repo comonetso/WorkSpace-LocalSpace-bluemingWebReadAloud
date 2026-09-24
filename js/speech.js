@@ -36,24 +36,48 @@ function Speech(texts, options) {
     cmd$.next({name: "seek", index})
     playbackState$.next("resumed")
   }
-  //the Clova API takes the volume as a synthesis parameter, so its audio has the volume in it
-  this.bakesVolume = engine == naverClovaTtsEngine
+  //audio played through playAudio() gets its rate and volume from the audio element, none of these engines
+  //synthesizes with them (see NaverClovaTtsEngine), so they can change while it plays
+  this.changesRateVolumeInPlace = this.reportsAudioTime
+  //engines whose voice follows the pitch; the others make the same audio whatever it is
+  this.usesPitch = ![
+      premiumTtsEngine, googleTranslateTtsEngine, amazonPollyTtsEngine, ibmWatsonTtsEngine, openaiTtsEngine, azureTtsEngine
+    ].includes(engine)
+    && !(engine == googleWavenetTtsEngine && /^GoogleChirp/.test(options.voice.voiceName))
   //Piper takes rate/pitch/volume only when it starts speaking: changes apply from the next reading
   this.appliesParamsLive = engine != piperTtsEngine
-  //new rate/pitch/volume from the page bar
-  this.setParams = (params, {restart}) => {
-    if (restart) {
-      //a new object, so audio prefetched with the old values isn't reused; then read the current segment again
-      options = {...options, ...params}
-      if (params.rate != null) options.rate = params.rate * (isGoogleNative(options.voice) ? 0.9 : 1)
-      self.options = options
-      if (engine.setEndTimeout) engine.setEndTimeout(GOOGLE_NATIVE_END_TIMEOUT * chunkRate / options.rate)
-      if (engine.seek == null && playlist.getIndex() != null) cmd$.next({name: "seek", index: playlist.getIndex()})
+
+  //new rate/pitch/volume from the page bar ----------------------------------------
+  //applied by the audio element (changesRateVolumeInPlace): same object, so prefetched audio stays usable
+  this.updateParams = params => {
+    Object.assign(options, params)
+  }
+  //values the voice is made with: a new object, so audio made with the old values isn't reused.
+  //The segment being read goes on as it was; restartSegment() or prepareSegment() brings the new values in
+  this.setParams = params => {
+    options = {...options, ...params}
+    if (params.rate != null) options.rate = params.rate * (isGoogleNative(options.voice) ? 0.9 : 1)
+    self.options = options
+    if (engine.setEndTimeout) engine.setEndTimeout(GOOGLE_NATIVE_END_TIMEOUT * chunkRate / options.rate)
+  }
+  //next/previous wait a moment before moving (their delay), the current index already being where they go
+  this.isMovePending = () => movePending
+  //read the current segment again with the current values. carryOn: it goes on from where it was (fromChar
+  //for the built-in voices, or the position the page bar hands to playAudio), so it keeps its start time,
+  //which "rewind" looks at
+  this.restartSegment = ({fromChar, carryOn} = {}) => {
+    if (engine.seek == null && playlist.getIndex() != null) {
+      cmd$.next({name: "seek", index: playlist.getIndex(), fromChar, keepTs: carryOn})
     }
-    else {
-      //a value the audio isn't made with (volume): same object, so prefetched audio stays usable
-      Object.assign(options, params)
-    }
+  }
+  //make the current segment's audio with the current values while the old audio keeps playing (engines whose
+  //prefetch() resolves true when done). True if it's ready and still the segment being read: restartSegment()
+  //then plays it without waiting. False if it couldn't be made: the old audio plays on
+  this.prepareSegment = async () => {
+    const index = playlist.getIndex()
+    if (index == null || engine.prefetch == null || movePending) return false
+    const ready = await engine.prefetch(texts[index], options)
+    return ready === true && !movePending && playlist.getIndex() == index
   }
   this.gotoEnd = () => cmd$.next({name: "gotoEnd"})
 
@@ -167,8 +191,8 @@ function Speech(texts, options) {
             engine.seek(cmd.index)
             return current
           } else {
-            const playback$ = playlist.seek(cmd.index)
-            return playback$ ? {playback$, ts: Date.now()} : current
+            const playback$ = playlist.seek(cmd.index, cmd.fromChar)
+            return playback$ ? {playback$, ts: cmd.keepTs && current ? current.ts : Date.now()} : current
           }
         }
         case "gotoEnd": {
@@ -269,10 +293,10 @@ function Speech(texts, options) {
           return makePlayback(texts[index])
         }
       },
-      seek(toIndex) {
+      seek(toIndex, fromChar) {
         if (toIndex >= 0 && toIndex < texts.length) {
           index = toIndex
-          return makePlayback(texts[index])
+          return makePlayback(texts[index], fromChar)
         }
       },
       gotoEnd() {
@@ -287,12 +311,14 @@ function Speech(texts, options) {
 
 
 
-  function makePlayback(text) {
-    if (engine.stop != null) return makePlaybackLegacy(text)
+  function makePlayback(text, fromChar) {
+    if (engine.stop != null) return makePlaybackLegacy(text, fromChar)
     else return engine.speak(text, options, playbackState$)
   }
 
-  function makePlaybackLegacy(text) {
+  //fromChar: speak only the rest of the text; event positions still count from the start of it
+  function makePlaybackLegacy(text, fromChar) {
+    const from = fromChar > 0 && fromChar < text.length ? fromChar : 0
     return playbackState$.pipe(
       rxjs.distinctUntilChanged(),
       rxjs.scan((playing$, state) => {
@@ -302,9 +328,9 @@ function Speech(texts, options) {
             return playing$
           } else {
             return new rxjs.Observable(observer => {
-              engine.speak(text, options, event => {
+              engine.speak(from ? text.slice(from) : text, options, event => {
                 if (event.type == "error") observer.error(event.error)
-                else observer.next(event)
+                else observer.next(from && event.charIndex != null ? {...event, charIndex: event.charIndex + from} : event)
               })
             })
           }

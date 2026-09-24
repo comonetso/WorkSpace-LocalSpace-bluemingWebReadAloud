@@ -6,6 +6,7 @@
     resume: resume,
     setMuted: setMuted,
     setVolume: setVolume,
+    setRate: setRate,
   })
 
   sendToPlayer({method: "offscreenCheckIn"})
@@ -61,6 +62,15 @@
   function setVolume(volume) {
     getSingletonAudio().volume = volume
     if (current$.value) current$.value.options.volume = volume
+    return true
+  }
+
+  //same formula as playAudioHere() (rateAdjust: Google Translate voices)
+  function setRate(rate) {
+    const audio = getSingletonAudio()
+    const current = current$.value
+    audio.defaultPlaybackRate = audio.playbackRate = (rate || 1) * (current && current.options.rateAdjust || 1)
+    if (current) current.options.rate = rate
     return true
   }
 
