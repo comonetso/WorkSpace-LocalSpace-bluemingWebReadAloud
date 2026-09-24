@@ -1,0 +1,56 @@
+{
+  "pagebar_calculating": {
+    "message": "계산 중"
+  },
+  "pagebar_about": {
+    "message": "약"
+  },
+  "pagebar_prev": {
+    "message": "이전 단락"
+  },
+  "pagebar_next": {
+    "message": "다음 단락"
+  },
+  "pagebar_play": {
+    "message": "재생"
+  },
+  "pagebar_pause": {
+    "message": "일시정지"
+  },
+  "pagebar_loading": {
+    "message": "불러오는 중"
+  },
+  "pagebar_mute": {
+    "message": "음소거"
+  },
+  "pagebar_unmute": {
+    "message": "음소거 해제"
+  },
+  "pagebar_stop": {
+    "message": "읽기 중지"
+  },
+  "pagebar_settings": {
+    "message": "음성 설정"
+  },
+  "pagebar_rate": {
+    "message": "속도"
+  },
+  "pagebar_pitch": {
+    "message": "피치"
+  },
+  "pagebar_volume": {
+    "message": "볼륨"
+  },
+  "options_selection_button": {
+    "message": "텍스트 선택 시 읽기 버튼"
+  },
+  "options_selection_button_off": {
+    "message": "끄기"
+  },
+  "options_selection_button_on": {
+    "message": "켜기 (모든 사이트 접근 허용 필요)"
+  },
+  "selection_button_title": {
+    "message": "선택한 글 읽기"
+  }
+}

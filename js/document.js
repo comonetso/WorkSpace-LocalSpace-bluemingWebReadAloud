@@ -3,6 +3,8 @@ function SimpleSource(texts, opts) {
   opts = opts || {}
   this.ready = Promise.resolve({
     lang: opts.lang,
+    singlePage: true,
+    splitParagraphs: opts.splitParagraphs,
   })
   this.isWaiting = function() {
     return false;
@@ -128,6 +130,7 @@ function TabSource() {
 
 
 function Doc(source, onEnd) {
+  const self = this;
   var info;
   var currentIndex;
   var activeSpeech;
@@ -198,6 +201,7 @@ function Doc(source, onEnd) {
     }
     if (activeSpeech) return;
     activeSpeech = await getSpeech(texts);
+    if (self.onSpeech) self.onSpeech(activeSpeech, {pageIndex: currentIndex, singlePage: !!info.singlePage || currentIndex == -100})
     await wait(playbackState, "resumed")
     activeSpeech.onEnd = function(err) {
       if (err) {
@@ -216,6 +220,7 @@ function Doc(source, onEnd) {
     return activeSpeech.play();
   }
 
+  //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
   function preprocess(text) {
     text = truncateRepeatedChars(text, 3)
     return text.replace(/https?:\/\/\S+/g, "HTTP URL.")
@@ -320,6 +325,7 @@ function Doc(source, onEnd) {
       pitch: settings.pitch || defaults.pitch,
       volume: settings.volume || defaults.volume,
       lang: config.langMap[lang] || lang || 'en-US',
+      splitParagraphs: !!info.splitParagraphs,
     }
     const voice = await getSpeechVoice(settings.voiceName, options.lang)
     if (!voice) throw new Error(JSON.stringify({code: "error_no_voice", lang: options.lang}));
@@ -374,7 +380,9 @@ function Doc(source, onEnd) {
   function rewind() {
     if (activeSpeech) {
       if (activeSpeech.canRewind()) activeSpeech.rewind()
-      else rewindPage()
+      else if (currentIndex > 0) rewindPage()
+      //no earlier page (first page, or a text selection): start the first part over instead of ending
+      else activeSpeech.seek(0)
     }
     else return Promise.reject(new Error("Can't rewind, not active"));
   }

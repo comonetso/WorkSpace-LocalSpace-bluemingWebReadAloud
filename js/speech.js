@@ -1,14 +1,28 @@
 function Speech(texts, options) {
   options.rate = (options.rate || 1) * (isGoogleNative(options.voice) ? 0.9 : 1);
+  //Google native voices get a safety end timeout that suits chunks cut for this rate (getChunks)
+  const GOOGLE_NATIVE_END_TIMEOUT = 16*1000
+  const chunkRate = options.rate
 
+  //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
   for (var i=0; i<texts.length; i++) if (/[\w)]$/.test(texts[i])) texts[i] += '.';
   if (texts.length) texts = getChunks(texts.join("\n\n"));
 
   var self = this;
   const engine = pickEngine()
   let piperState
+  const events$ = new rxjs.Subject()
 
   this.options = options;
+  this.events$ = events$.asObservable()
+  //engines playing each segment's audio file through playAudio(): they report its position ("time" events)
+  this.reportsAudioTime = [
+    premiumTtsEngine, googleTranslateTtsEngine, amazonPollyTtsEngine, googleWavenetTtsEngine,
+    ibmWatsonTtsEngine, openaiTtsEngine, naverClovaTtsEngine, azureTtsEngine
+  ].includes(engine)
+  //audio played through playAudio() can be muted without stopping playback;
+  //Piper does that only when it can't apply the rate itself (externalPlayback in PiperTtsEngine)
+  this.canMute = engine == piperTtsEngine ? !!(options.rate && options.rate != 1) : this.reportsAudioTime
   this.play = () => playbackState$.next("resumed")
   this.pause = () => playbackState$.next("paused")
   this.stop = () => cmd$.error({name: "CancellationException", message: "Playback cancelled"})
@@ -21,6 +35,25 @@ function Speech(texts, options) {
   this.seek = index => {
     cmd$.next({name: "seek", index})
     playbackState$.next("resumed")
+  }
+  //the Clova API takes the volume as a synthesis parameter, so its audio has the volume in it
+  this.bakesVolume = engine == naverClovaTtsEngine
+  //Piper takes rate/pitch/volume only when it starts speaking: changes apply from the next reading
+  this.appliesParamsLive = engine != piperTtsEngine
+  //new rate/pitch/volume from the page bar
+  this.setParams = (params, {restart}) => {
+    if (restart) {
+      //a new object, so audio prefetched with the old values isn't reused; then read the current segment again
+      options = {...options, ...params}
+      if (params.rate != null) options.rate = params.rate * (isGoogleNative(options.voice) ? 0.9 : 1)
+      self.options = options
+      if (engine.setEndTimeout) engine.setEndTimeout(GOOGLE_NATIVE_END_TIMEOUT * chunkRate / options.rate)
+      if (engine.seek == null && playlist.getIndex() != null) cmd$.next({name: "seek", index: playlist.getIndex()})
+    }
+    else {
+      //a value the audio isn't made with (volume): same object, so prefetched audio stays usable
+      Object.assign(options, params)
+    }
   }
   this.gotoEnd = () => cmd$.next({name: "gotoEnd"})
 
@@ -40,7 +73,7 @@ function Speech(texts, options) {
       premiumTtsEngine.prepare(options)
       return premiumTtsEngine;
     }
-    if (isGoogleNative(options.voice)) return new TimeoutTtsEngine(browserTtsEngine, 3*1000, 16*1000);
+    if (isGoogleNative(options.voice)) return new TimeoutTtsEngine(browserTtsEngine, 3*1000, GOOGLE_NATIVE_END_TIMEOUT);
     return browserTtsEngine;
   }
 
@@ -52,9 +85,9 @@ function Speech(texts, options) {
       return new WordBreaker(wordLimit, punctuator).breakText(text);
     }
     else {
-      if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator).breakText(text);
+      if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator, null, options.splitParagraphs).breakText(text);
       else if (isPiperVoice(options.voice)) return [text];
-      else return new CharBreaker(750, punctuator, 200).breakText(text);
+      else return new CharBreaker(750, punctuator, 200, options.splitParagraphs).breakText(text);
     }
   }
 
@@ -82,6 +115,7 @@ function Speech(texts, options) {
   const playbackState$ = new rxjs.BehaviorSubject("paused")
   const playlist = makePlaylist()
   const cmd$ = new rxjs.Subject()
+  let movePending = false
   const isLoadingSubject = new rxjs.BehaviorSubject(false)
   const isLoading$ = isLoadingSubject.pipe(
     rxjs.distinctUntilChanged(),
@@ -93,6 +127,10 @@ function Speech(texts, options) {
     ),
     rxjs.switchAll(),
     rxjs.shareReplay({bufferSize: 1, refCount: false})
+  )
+  this.state$ = rxjs.combineLatest([playbackState$.pipe(rxjs.distinctUntilChanged()), isLoading$]).pipe(
+    rxjs.map(([state, isLoading]) => state == "resumed" ? (isLoading ? "LOADING" : "PLAYING") : "PAUSED"),
+    rxjs.distinctUntilChanged()
   )
 
   cmd$.pipe(
@@ -141,7 +179,11 @@ function Speech(texts, options) {
     }, null),
     rxjs.takeWhile(x => x),
     rxjs.distinctUntilChanged(),
+    rxjs.tap(x => {
+      if (x.delay) movePending = true
+    }),
     rxjs.debounce(x => x.delay ? rxjs.timer(x.delay) : rxjs.of(0)),
+    rxjs.tap(() => movePending = false),
     rxjs.switchMap(x =>
       rxjs.concat(
         rxjs.of({type: "load"}),
@@ -152,6 +194,8 @@ function Speech(texts, options) {
   .subscribe({
     next(event) {
       isLoadingSubject.next(event.type == "load")
+      //announce "end" before moving on, otherwise listeners get the next segment's "load" first
+      if (event.type == "end") events$.next({...event, index: playlist.getIndex()})
       switch (event.type) {
         case "start":
           if (event.sentenceStartIndicies) {
@@ -173,16 +217,20 @@ function Speech(texts, options) {
         case "end":
           if (piperState) {
             cmd$.complete()
-          } else {
+          } else if (!movePending) {
+            //a forward/rewind already waiting for its delay decides where to go next
             cmd$.next({name: "forward"})
           }
           break
       }
+      if (event.type != "end") events$.next({...event, index: playlist.getIndex()})
     },
     complete() {
+      events$.complete()
       if (self.onEnd) self.onEnd()
     },
     error(err) {
+      events$.complete()
       if (err.name != "CancellationException") {
         if (self.onEnd) self.onEnd(err)
       }
@@ -340,10 +388,10 @@ function Speech(texts, options) {
     }
   }
 
-  function CharBreaker(charLimit, punctuator, paragraphCombineThreshold) {
+  function CharBreaker(charLimit, punctuator, paragraphCombineThreshold, keepParagraphsApart) {
     this.breakText = breakText;
     function breakText(text) {
-      return merge(punctuator.getParagraphs(text), breakParagraph, paragraphCombineThreshold);
+      return merge(punctuator.getParagraphs(text), breakParagraph, paragraphCombineThreshold, keepParagraphsApart);
     }
     function breakParagraph(text) {
       return merge(punctuator.getSentences(text), breakSentence);
@@ -362,7 +410,7 @@ function Speech(texts, options) {
       }
       return result;
     }
-    function merge(parts, breakPart, combineThreshold) {
+    function merge(parts, breakPart, combineThreshold, keepApart) {
       var result = [];
       var group = {parts: [], charCount: 0};
       var flush = function() {
@@ -379,7 +427,7 @@ function Speech(texts, options) {
           for (var i=0; i<subParts.length; i++) result.push(subParts[i]);
         }
         else {
-          if (group.charCount + charCount > (combineThreshold || charLimit)) flush();
+          if (keepApart || group.charCount + charCount > (combineThreshold || charLimit)) flush();
           group.parts.push(part);
           group.charCount += charCount;
         }

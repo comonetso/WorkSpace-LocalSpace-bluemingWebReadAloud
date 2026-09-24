@@ -4,6 +4,8 @@
     play: play,
     pause: pause,
     resume: resume,
+    setMuted: setMuted,
+    setVolume: setVolume,
   })
 
   sendToPlayer({method: "offscreenCheckIn"})
@@ -19,7 +21,7 @@
         return playAudioHere(Promise.resolve(current.url), current.options, current.playbackState$).pipe(
           rxjs.catchError(err => rxjs.of({type: "error", error: errorToJson(err)})),
           rxjs.tap(event => {
-            sendToPlayer({method: "offscreenPlaybackEvent", args: [event]})
+            sendToPlayer({method: "offscreenPlaybackEvent", args: [{...event, playId: current.options.playId}]})
               .catch(console.error)
           })
         )
@@ -47,6 +49,18 @@
 
   function resume() {
     current$.value.playbackState$.next("resumed")
+    return true
+  }
+
+  function setMuted(muted) {
+    getSingletonAudio().muted = muted
+    if (current$.value) current$.value.options.muted = muted
+    return true
+  }
+
+  function setVolume(volume) {
+    getSingletonAudio().volume = volume
+    if (current$.value) current$.value.options.volume = volume
     return true
   }
 

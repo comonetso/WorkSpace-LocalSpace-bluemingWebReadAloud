@@ -48,7 +48,7 @@ function BrowserTtsEngine() {
       pitch: options.pitch,
       volume: options.volume,
       requiredEventTypes: ["start", "end"],
-      desiredEventTypes: ["start", "end", "error"],
+      desiredEventTypes: ["start", "end", "error", "word"],
       onEvent: onEvent
     })
   }
@@ -85,6 +85,9 @@ function WebSpeechEngine() {
     if (options.volume) utter.volume = options.volume;
     utter.onstart = onEvent.bind(null, {type: 'start', charIndex: 0});
     utter.onend = onEvent.bind(null, {type: 'end', charIndex: text.length});
+    utter.onboundary = function(event) {
+      if (event.name == "word") onEvent({type: 'word', charIndex: event.charIndex, length: event.charLength});
+    };
     utter.onerror = function(event) {
       if (event.error == "canceled" || event.error == "interrupted") return;
       onEvent({type: 'error', error: new Error(event.error)});
@@ -134,6 +137,8 @@ function DummyTtsEngine() {
 
 function TimeoutTtsEngine(baseEngine, startTimeout, endTimeout) {
   let speakSub
+  //the end timeout suits the chunk size, which was cut for the rate at the time; see Speech.setParams()
+  this.setEndTimeout = millis => endTimeout = millis
   this.speak = function(text, options, onEvent) {
     speakSub = new rxjs.Observable(observer => {
       baseEngine.speak(text, options, event => observer.next(event))
@@ -1147,8 +1152,8 @@ function NaverClovaTtsEngine() {
     // options 객체에서 값 추출
     if (options) {
       if (options.pitch) {
-        // pitch 범위: 0.5 ~ 1.5 => -5 ~ 5로 변환
-        pitch = Math.round((options.pitch - 1) * 10);
+        // pitch 범위: 0.5 ~ 1.5 => 5 ~ -5로 변환 (API: -5 = 1.2배 높게, 5 = 0.8배 낮게)
+        pitch = Math.round((1 - options.pitch) * 10);
         // 범위 제한
         pitch = Math.max(-5, Math.min(5, pitch));
       }

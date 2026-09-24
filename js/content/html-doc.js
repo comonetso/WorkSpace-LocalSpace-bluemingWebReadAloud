@@ -4,6 +4,9 @@ var readAloudDoc = new function() {
 
   this.ignoreTags = "select, textarea, button, label, audio, video, dialog, embed, menu, nav, noframes, noscript, object, script, style, svg, aside, footer, #footer, .no-read-aloud, [aria-hidden=true]";
 
+  //the whole article is returned at index 0, so its total length is known up front
+  this.isSinglePage = true;
+
   this.getCurrentIndex = function() {
     return 0;
   }

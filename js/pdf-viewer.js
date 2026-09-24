@@ -19,6 +19,21 @@ registerMessageListener("pdfViewer", {
     const queue = await ready
     const res = await queue.send({method: "getTexts", index: index, quietly: quietly})
     return res.value
+  },
+  //playback bar (js/page-ui.js); every open viewer gets this message, only the one being read shows it
+  startPageUi: async function(sessionId, tabId) {
+    const tab = await brapi.tabs.getCurrent()
+    if (!tab || tab.id != tabId) return false
+    const frame = document.getElementById("viewer-frame")
+    const started = window.__readAloudHrgUi.startBar(sessionId, {
+      onRemove() {
+        frame.style.height = ""
+      }
+    })
+    //keep the whole viewer usable: shrink it to end above the bar while the bar is shown
+    const bar = document.querySelector("readaloud-hrg-bar")
+    if (started && bar) frame.style.height = "calc(100% - " + bar.getBoundingClientRect().height + "px)"
+    return started
   }
 })
 

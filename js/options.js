@@ -216,6 +216,28 @@
 
 
 
+  //selectionButton: green dot next to selected text (js/selection-button.js); it runs on every page,
+  //so turning it on asks for access to all sites. The service worker registers it (syncSelectionButton)
+  domReadyPromise
+    .then(() => {
+      $("#selection-button")
+        .change(async function () {
+          const on = $(this).val() == "true"
+          if (on && !await brapi.permissions.request({ origins: config.selectionButtonOrigins }).catch(() => false)) {
+            $(this).val("false")
+            return
+          }
+          updateSettings({ selectionButton: on })
+        })
+    })
+
+  rxjs.combineLatest([observeSetting("selectionButton"), domReadyPromise])
+    .subscribe(([selectionButton]) => {
+      $("#selection-button").val(selectionButton ? "true" : "false")
+    })
+
+
+
   //buttons
   domReadyPromise
     .then(() => {

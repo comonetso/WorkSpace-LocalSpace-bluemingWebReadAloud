@@ -29,6 +29,8 @@ var config = {
     permissions: ["webRequest"],
     origins: ["https://*/"]
   },
+  //the read button next to selected text (js/selection-button.js) runs on every page
+  selectionButtonOrigins: ["http://*/", "https://*/"],
   browserId: getBrowser(),
 }
 
@@ -779,6 +781,7 @@ function playAudioHere(urlPromise, options, playbackState$) {
       new rxjs.Observable(observer => {
         audio.defaultPlaybackRate = (options.rate || 1) * (options.rateAdjust || 1)
         audio.volume = options.volume || 1
+        audio.muted = !!options.muted
         audio.oncanplay = () => observer.next()
         audio.onerror = () => observer.error(new Error(audio.error.message || audio.error.code))
         audio.src = url
@@ -792,8 +795,17 @@ function playAudioHere(urlPromise, options, playbackState$) {
         rxjs.concat(
           rxjs.of({type: "start"}),
           new rxjs.Observable(observer => {
+            //playback position, used by the page playback bar for elapsed/total time
+            const reportTime = () => observer.next({type: "time", currentTime: audio.currentTime, duration: audio.duration, rate: audio.playbackRate})
             audio.onended = () => observer.next({type: "end"})
             audio.onerror = () => observer.error(new Error(audio.error.message || audio.error.code))
+            audio.ontimeupdate = reportTime
+            audio.ondurationchange = reportTime
+            reportTime()
+            return () => {
+              if (audio.ontimeupdate == reportTime) audio.ontimeupdate = null
+              if (audio.ondurationchange == reportTime) audio.ondurationchange = null
+            }
           })
         ),
         playbackState$.pipe(

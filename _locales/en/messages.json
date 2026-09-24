@@ -175,5 +175,59 @@
   },
   "google_translate_keep_page_open": {
     "message": "Read Aloud is using Google Translate for text-to-speech.  Please keep this tab open."
+  },
+  "pagebar_calculating": {
+    "message": "Calculating…"
+  },
+  "pagebar_about": {
+    "message": "about"
+  },
+  "pagebar_prev": {
+    "message": "Previous paragraph"
+  },
+  "pagebar_next": {
+    "message": "Next paragraph"
+  },
+  "pagebar_play": {
+    "message": "Resume"
+  },
+  "pagebar_pause": {
+    "message": "Pause"
+  },
+  "pagebar_loading": {
+    "message": "Loading"
+  },
+  "pagebar_mute": {
+    "message": "Mute"
+  },
+  "pagebar_unmute": {
+    "message": "Unmute"
+  },
+  "pagebar_stop": {
+    "message": "Stop reading"
+  },
+  "pagebar_settings": {
+    "message": "Voice settings"
+  },
+  "pagebar_rate": {
+    "message": "Speed"
+  },
+  "pagebar_pitch": {
+    "message": "Pitch"
+  },
+  "pagebar_volume": {
+    "message": "Volume"
+  },
+  "options_selection_button": {
+    "message": "Read button on selected text"
+  },
+  "options_selection_button_off": {
+    "message": "Off"
+  },
+  "options_selection_button_on": {
+    "message": "On (needs access to all sites)"
+  },
+  "selection_button_title": {
+    "message": "Read the selected text"
   }
 }

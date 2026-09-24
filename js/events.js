@@ -2,6 +2,8 @@
 brapi.runtime.onInstalled.addListener(function() {
   installContentScripts()
   installContextMenus()
+  //scripts registered at runtime are dropped when the extension is updated
+  syncSelectionButton(true)
 })
 
 
@@ -57,6 +59,51 @@ async function installContentScripts() {
   }
 }
 
+/**
+ * The green dot next to selected text (js/selection-button.js). It's turned on in the options, which
+ * ask for access to all sites at that moment; the script is registered only while it's on and allowed.
+ */
+const SELECTION_BUTTON_SCRIPT = {
+  id: "selection-button",
+  matches: ["http://*/*", "https://*/*"],
+  js: ["js/selection-button.js"],
+  allFrames: true,
+  runAt: "document_idle",
+}
+
+brapi.storage.onChanged.addListener(function(changes) {
+  if (changes.selectionButton) syncSelectionButton(true)
+})
+if (brapi.permissions.onRemoved) brapi.permissions.onRemoved.addListener(() => syncSelectionButton(false))
+
+async function syncSelectionButton(injectOpenTabs) {
+  try {
+    const {selectionButton} = await getSettings(["selectionButton"])
+    const granted = await brapi.permissions.contains({origins: config.selectionButtonOrigins})
+    const registered = (await brapi.scripting.getRegisteredContentScripts({ids: [SELECTION_BUTTON_SCRIPT.id]})).length > 0
+    if (selectionButton && granted) {
+      if (registered) return
+      await brapi.scripting.registerContentScripts([SELECTION_BUTTON_SCRIPT])
+      //pages opened before it was turned on get it too
+      if (injectOpenTabs) {
+        const tabs = await brapi.tabs.query({url: SELECTION_BUTTON_SCRIPT.matches})
+        for (const tab of tabs) {
+          brapi.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, files: SELECTION_BUTTON_SCRIPT.js})
+            .catch(() => {})
+        }
+      }
+    }
+    else {
+      if (registered) await brapi.scripting.unregisterContentScripts({ids: [SELECTION_BUTTON_SCRIPT.id]})
+      //site access was taken away in the browser's extension settings: the option shows as off
+      if (selectionButton && !granted) await updateSettings({selectionButton: false})
+    }
+  }
+  catch (err) {
+    console.error("Cannot update the selection button", err)
+  }
+}
+
 function installContextMenus() {
   if (brapi.contextMenus)
   brapi.contextMenus.create({
@@ -77,37 +124,34 @@ function installContextMenus() {
 if (brapi.contextMenus)
 brapi.contextMenus.onClicked.addListener(function(info, tab) {
   if (info.menuItemId == "read-selection")
-    Promise.resolve()
-      .then(async function() {
-        const hasTab = tab && tab.id != -1
-        //info.selectionText has line breaks collapsed, read the selection from the page to keep paragraph breaks
-        const text = (hasTab && await getPageSelection(tab.id, info.frameId)) || info.selectionText
-        const lang = hasTab ? await detectTabLanguage(tab.id) : undefined
-        return playText(text, {lang: lang})
-      })
+    readSelectionInTab(tab, info.frameId, info.selectionText)
       .catch(handleHeadlessError)
 })
 
-async function getPageSelection(tabId, frameId) {
-  try {
-    const items = await brapi.scripting.executeScript({
-      target: {
-        tabId: tabId,
-        frameIds: frameId ? [frameId] : undefined,
-      },
-      func: function() {
-        const elem = document.activeElement
-        if (elem && elem.tagName == "TEXTAREA") return elem.value.slice(elem.selectionStart, elem.selectionEnd)
-        return window.getSelection().toString()
-      }
-    })
-    const text = items[0] && items[0].result
-    return text ? text.trim() : null
-  }
-  catch (err) {
-    console.warn("Cannot read selection from page", err)
-    return null
-  }
+//the green dot next to selected text (js/selection-button.js): the frame that sent it has the selection
+brapi.runtime.onMessage.addListener(function(request, sender) {
+  if (request.dest == "readSelection" && sender.tab)
+    readSelectionInTab(sender.tab, sender.frameId, request.text)
+      .catch(handleHeadlessError)
+})
+
+async function readSelectionInTab(tab, frameId, fallbackText) {
+  const hasTab = tab && tab.id != -1
+  const sessionId = newPageUiSessionId()
+  //the context menu's info.selectionText has line breaks collapsed: read the selection from the page
+  //to keep paragraph breaks (fallbackText is used only when that fails)
+  const captured = hasTab ? await captureSelection(tab.id, frameId, sessionId) : null
+  const text = (captured && captured.text) || fallbackText
+  const lang = hasTab ? await detectTabLanguage(tab.id) : undefined
+  const ui = hasTab ? {
+    sessionId,
+    tabId: tab.id,
+    selection: true,
+    pdfViewer: (tab.url || "").startsWith(brapi.runtime.getURL("pdf-viewer.html")),
+    highlight: !!(captured && captured.mappable && captured.text == text),
+    highlightFrameId: frameId || 0,
+  } : null
+  return playText(text, {lang: lang, splitParagraphs: true}, ui)
 }
 
 
@@ -199,9 +243,10 @@ var currentTask = {
   }
 }
 
-async function playText(text, opts) {
+async function playText(text, opts, ui) {
   const hasPlayer = await stop().then(res => res == true, err => false)
   if (!hasPlayer) await injectPlayer(await getActiveTab())
+  if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playText", args: [text, opts]})
 }
 
@@ -210,16 +255,20 @@ async function playTab(tabId) {
   if (!tab) throw new Error(JSON.stringify({code: "error_page_unreadable"}))
 
   const task = currentTask.begin()
+  let ui = null
   try {
     const handler = contentHandlers.find(h => h.match(tab.url || "", tab.title))
     if (handler.validate) await handler.validate(tab)
     if (handler.getSourceUri) {
-      await brapi.storage.local.set({"sourceUri": handler.getSourceUri(tab)})
+      const sourceUri = handler.getSourceUri(tab)
+      await brapi.storage.local.set({"sourceUri": sourceUri})
+      if (sourceUri.startsWith("pdfviewer:")) ui = {sessionId: newPageUiSessionId(), tabId: tab.id, pdfViewer: true}
     }
     else {
       const frameId = handler.getFrameId && await getAllFrames(tab.id).then(frames => handler.getFrameId(frames))
       if (!await contentScriptAlreadyInjected(tab, frameId)) await injectContentScript(tab, frameId, handler.extraScripts)
       await brapi.storage.local.set({"sourceUri": "contentscript:" + tab.id})
+      ui = {sessionId: newPageUiSessionId(), tabId: tab.id}
     }
   }
   finally {
@@ -228,7 +277,86 @@ async function playTab(tabId) {
 
   const hasPlayer = await stop().then(res => res == true, err => false)
   if (!hasPlayer) await injectPlayer(tab)
+  if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playTab"})
+}
+
+
+
+/**
+ * Page playback UI: playback bar on top of the page, and highlight of the selection being read.
+ * The UI lives in js/page-ui.js (page side) and js/page-ui-host.js (player side).
+ * Failing to show it never stops the reading itself.
+ */
+const PAGE_UI_HIGHLIGHT_CSS = `
+  ::highlight(readaloud-hrg-para) { background-color: rgba(255, 226, 0, 0.3); }
+  ::highlight(readaloud-hrg-word) { background-color: rgba(255, 213, 0, 0.9); color: #000; }
+`
+let pageUiSessionSeq = 0
+
+function newPageUiSessionId() {
+  return Date.now().toString(36) + "." + (++pageUiSessionSeq)
+}
+
+async function captureSelection(tabId, frameId, sessionId) {
+  try {
+    const target = {tabId, frameIds: [frameId || 0]}
+    await brapi.scripting.executeScript({target, files: ["js/page-ui.js"]})
+    const [item] = await brapi.scripting.executeScript({
+      target,
+      func: id => window.__readAloudHrgUi.captureSelection(id),
+      args: [sessionId],
+    })
+    return item && item.result
+  }
+  catch (err) {
+    console.warn("Cannot read selection from page", err)
+    return null
+  }
+}
+
+async function startPageUi(ui) {
+  try {
+    await sendToPlayer({method: "beginUiSession", args: [ui]})
+  }
+  catch (err) {
+    console.warn("Cannot start page UI session", err)
+    return
+  }
+  //not awaited: reading starts right away, the bar shows up as soon as it's injected
+  showPageUi(ui)
+}
+
+async function showPageUi(ui) {
+  //the bar and the highlight can live in different frames: failing one doesn't stop the other
+  await Promise.all([showPageBar(ui), ui.highlight && showPageHighlight(ui)])
+}
+
+async function showPageBar(ui) {
+  try {
+    if (ui.pdfViewer) {
+      //the extension's own PDF viewer loads js/page-ui.js itself (scripting can't inject into extension pages)
+      await brapi.runtime.sendMessage({dest: "pdfViewer", method: "startPageUi", args: [ui.sessionId, ui.tabId]})
+      return
+    }
+    const top = {tabId: ui.tabId, frameIds: [0]}
+    await brapi.scripting.executeScript({target: top, files: ["js/page-ui.js"]})
+    await brapi.scripting.executeScript({target: top, func: id => window.__readAloudHrgUi.startBar(id), args: [ui.sessionId]})
+  }
+  catch (err) {
+    console.warn("Cannot show playback bar on page", err)
+  }
+}
+
+async function showPageHighlight(ui) {
+  try {
+    const target = {tabId: ui.tabId, frameIds: [ui.highlightFrameId]}
+    await brapi.scripting.insertCSS({target, css: PAGE_UI_HIGHLIGHT_CSS})
+    await brapi.scripting.executeScript({target, func: id => window.__readAloudHrgUi.startHighlight(id), args: [ui.sessionId]})
+  }
+  catch (err) {
+    console.warn("Cannot highlight the selection on page", err)
+  }
 }
 
 async function reloadAndPlayTab(tabId) {

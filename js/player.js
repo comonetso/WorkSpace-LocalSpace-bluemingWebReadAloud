@@ -125,6 +125,7 @@ var messageHandlers = {
   isPaired: () => phoneTtsEngine.isPaired(),
   managePiperVoices,
   getLastUrl: () => lastUrlPromise,
+  beginUiSession: ui => pageUiHost.begin(ui),
 }
 
 registerMessageListener("player", messageHandlers)
@@ -165,9 +166,9 @@ function playText(text, opts) {
   opts = opts || {}
   playbackError = null
   if (!activeDoc) {
-    openDoc(new SimpleSource(text.split(/(?:\r?\n){2,}/), {lang: opts.lang}), function(err) {
+    openDoc(new SimpleSource(text.split(/(?:\r?\n){2,}/), {lang: opts.lang, splitParagraphs: opts.splitParagraphs}), function(err) {
       if (err) playbackError = err
-    })
+    }, {sourceText: text})
   }
   const doc = activeDoc
   return activeDoc.play()
@@ -238,35 +239,41 @@ function getPlaybackState() {
   }
 }
 
-function openDoc(source, onEnd) {
+function openDoc(source, onEnd, uiOpts) {
   activeDoc = new Doc(source, function(err) {
     handleError(err);
     closeDoc();
     if (typeof onEnd == "function") onEnd(err);
   })
+  pageUiHost.attachDoc(activeDoc, uiOpts)
   idleSubject.next(false)
   lastUrlPromise = Promise.resolve(source.getUri())
 }
 
 function closeDoc() {
   if (activeDoc) {
+    const doc = activeDoc
     activeDoc.close();
     activeDoc = null;
     idleSubject.next(true)
+    pageUiHost.detachDoc(doc)
   }
 }
 
 function forward() {
+  pageUiHost.noteSkip()
   if (activeDoc) return activeDoc.forward();
   else return Promise.reject(new Error("Can't forward, not active"));
 }
 
 function rewind() {
+  pageUiHost.noteSkip()
   if (activeDoc) return activeDoc.rewind();
   else return Promise.reject(new Error("Can't rewind, not active"));
 }
 
 function seek(n) {
+  pageUiHost.noteSkip()
   if (activeDoc) return activeDoc.seek(n);
   else return Promise.reject(new Error("Can't seek, not active"));
 }
@@ -300,6 +307,12 @@ function playAudio(urlPromise, options, playbackState$) {
     return playAudioOffscreen(urlPromise, options, playbackState$)
   }
   else {
+    //the bar's mute/volume state is read when the audio actually starts, not when the segment was queued
+    const volume = options.volume
+    options = Object.defineProperties({...options}, {
+      muted: {get: () => pageUiHost.isMuted(), enumerable: true},
+      volume: {get: () => pageUiHost.liveVolume() ?? volume, enumerable: true},
+    })
     return playAudioHere(requestAudioPlaybackPermission().then(() => urlPromise), options, playbackState$)
   }
 }
@@ -324,7 +337,17 @@ async function createOffscreen() {
   await readyPromise
 }
 
+let offscreenPlaySeq = 0
+
+//mute/volume state as of sending the audio to the offscreen document (the bar may change them while a segment loads)
+function withPlaybackState(options) {
+  return {...options, muted: pageUiHost.isMuted(), volume: pageUiHost.liveVolume() ?? options.volume}
+}
+
 function playAudioOffscreen(urlPromise, options, playbackState$) {
+  //the offscreen document tags its events with this id, so late events of the previous audio are dropped
+  const playId = ++offscreenPlaySeq
+  options = {...options, playId}
   return rxjs.from(urlPromise).pipe(
     rxjs.exhaustMap(url =>
       playbackState$.pipe(
@@ -334,7 +357,7 @@ function playAudioOffscreen(urlPromise, options, playbackState$) {
           if (state == "resumed") {
             return rxjs.defer(async () => {
               if (!playback$) {
-                const result = await sendToOffscreen({method: "play", args: [url, options]})
+                const result = await sendToOffscreen({method: "play", args: [url, withPlaybackState(options)]})
                 if (result != true) throw "Offscreen doc not present"
               } else {
                 const result = await sendToOffscreen({method: "resume"})
@@ -345,7 +368,7 @@ function playAudioOffscreen(urlPromise, options, playbackState$) {
                 console.debug(err)
                 return rxjs.defer(createOffscreen).pipe(
                   rxjs.exhaustMap(async () => {
-                    const result = await sendToOffscreen({method: "play", args: [url, options]})
+                    const result = await sendToOffscreen({method: "play", args: [url, withPlaybackState(options)]})
                     if (result != true) throw new Error("Offscreen doc inaccessible")
                   })
                 )
@@ -369,6 +392,7 @@ function playAudioOffscreen(urlPromise, options, playbackState$) {
     rxjs.mergeWith(
       new rxjs.Observable(observer => {
         messageHandlers.offscreenPlaybackEvent = function(event) {
+          if (event.playId != null && event.playId != playId) return
           if (event.type == "error") observer.error(event.error)
           else observer.next(event)
         }

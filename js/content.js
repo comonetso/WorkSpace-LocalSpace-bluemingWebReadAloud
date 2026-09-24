@@ -12,6 +12,7 @@
       url: location.href,
       title: document.title,
       lang: getLang(),
+      singlePage: typeof readAloudDoc != "undefined" && !!readAloudDoc.isSinglePage,
     }
   }
 
