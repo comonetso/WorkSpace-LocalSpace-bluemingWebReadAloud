@@ -78,15 +78,37 @@ if (brapi.contextMenus)
 brapi.contextMenus.onClicked.addListener(function(info, tab) {
   if (info.menuItemId == "read-selection")
     Promise.resolve()
-      .then(function() {
-        if (tab && tab.id != -1) return detectTabLanguage(tab.id)
-        else return undefined
-      })
-      .then(function(lang) {
-        return playText(info.selectionText, {lang: lang})
+      .then(async function() {
+        const hasTab = tab && tab.id != -1
+        //info.selectionText has line breaks collapsed, read the selection from the page to keep paragraph breaks
+        const text = (hasTab && await getPageSelection(tab.id, info.frameId)) || info.selectionText
+        const lang = hasTab ? await detectTabLanguage(tab.id) : undefined
+        return playText(text, {lang: lang})
       })
       .catch(handleHeadlessError)
 })
+
+async function getPageSelection(tabId, frameId) {
+  try {
+    const items = await brapi.scripting.executeScript({
+      target: {
+        tabId: tabId,
+        frameIds: frameId ? [frameId] : undefined,
+      },
+      func: function() {
+        const elem = document.activeElement
+        if (elem && elem.tagName == "TEXTAREA") return elem.value.slice(elem.selectionStart, elem.selectionEnd)
+        return window.getSelection().toString()
+      }
+    })
+    const text = items[0] && items[0].result
+    return text ? text.trim() : null
+  }
+  catch (err) {
+    console.warn("Cannot read selection from page", err)
+    return null
+  }
+}
 
 
 /**
