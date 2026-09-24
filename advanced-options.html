@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Read Aloud Advanced Options</title>
+  <link rel="stylesheet" type="text/css" href="css/common.css">
+  <link rel="stylesheet" type="text/css" href="css/options.css">
+
+  <script src="js/rxjs.umd.min.js"></script>
+  <script src="js/jquery-3.7.1.min.js"></script>
+  <script src="js/defaults.js"></script>
+  <script src="js/advanced-options.js"></script>
+</head>
+<body>
+  <div class="container-fluid">
+    <button type="button" class="close" aria-label="Close">
+      <span aria-hidden="true">&times;</span>
+    </button>
+
+    <h2>Advanced Options</h2>
+
+    <div id="advanced-options">
+      <input type="checkbox" id="fix-bt-silence-gap"
+      ><label for="fix-bt-silence-gap">Fix missing first few words of each paragraph when using Bluetooth headset</label>
+
+      <h3>Naver Clova TTS API Settings</h3>
+      <div class="form-group">
+        <label for="clova-client-id">Clova Client ID</label>
+        <input type="text" class="form-control" id="clova-client-id">
+      </div>
+      <div class="form-group">
+        <label for="clova-client-secret">Clova Client Secret</label>
+        <input type="text" class="form-control" id="clova-client-secret">
+      </div>
+      <div class="form-group">
+        <label for="clova-api-url">Clova API URL</label>
+        <input type="text" class="form-control" id="clova-api-url" value="https://naveropenapi.apigw.ntruss.com/tts-premium/v1">
+      </div>
+      <button type="button" id="save-clova-settings" class="btn btn-primary">Save Clova Settings</button>
+    </div>
+  </div>
+</body>
+</html>

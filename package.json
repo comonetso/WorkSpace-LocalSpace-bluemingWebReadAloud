@@ -1,0 +1,19 @@
+{
+  "name": "read-aloud-hrg",
+  "version": "2.20.0",
+  "description": "Text to speech with Naver Clova API support",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "proxy": "node proxy-server.js",
+    "test-api": "node test-cors-bypass.js"
+  },
+  "devDependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0",
+    "body-parser": "^1.20.2"
+  },
+  "dependencies": {
+  }
+}

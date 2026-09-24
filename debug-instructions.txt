@@ -1,0 +1,138 @@
+// 콘솔에서 아래 코드를 복사하여 실행하세요.
+
+// 1. 네이버 클로바 API 테스트 함수
+async function testClovaAPI() {
+  // 테스트할 API URL과 인증 정보
+  const apiUrl = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts";
+  const clientId = "여기에_클라이언트_ID_입력";
+  const clientSecret = "여기에_클라이언트_시크릿_입력";
+
+  // 테스트 요청 생성
+  const formData = new URLSearchParams();
+  formData.append('speaker', 'mijin');
+  formData.append('text', '안녕하세요');
+  formData.append('format', 'mp3');
+  formData.append('speed', 0);
+  formData.append('volume', 0);
+  formData.append('pitch', 0);
+
+  console.log('테스트 URL:', apiUrl);
+  console.log('요청 데이터:', Object.fromEntries(formData));
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-NCP-APIGW-API-KEY-ID": clientId,
+        "X-NCP-APIGW-API-KEY": clientSecret
+      },
+      body: formData
+    });
+
+    console.log('응답 상태:', res.status, res.statusText);
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.error('API 오류:', errorText);
+      return false;
+    }
+
+    // 응답 확인 (blob 타입이어야 함)
+    const blob = await res.blob();
+    console.log('응답 타입:', blob.type);
+    console.log('응답 크기:', blob.size, 'bytes');
+
+    // 테스트 성공
+    console.log('API 테스트 성공!');
+    return true;
+  } catch (err) {
+    console.error('API 호출 예외:', err);
+    return false;
+  }
+}
+
+// 2. 설정된 인증 정보 확인
+async function checkClovaCredentials() {
+  const settings = await new Promise(resolve => {
+    if (typeof chrome !== 'undefined') {
+      chrome.storage.local.get(['clovaCreds'], resolve);
+    } else {
+      browser.storage.local.get(['clovaCreds']).then(resolve);
+    }
+  });
+
+  console.log('저장된 클로바 인증 정보:', settings.clovaCreds);
+  return settings.clovaCreds;
+}
+
+// 3. 인증 정보로 테스트 실행
+async function runTestWithCredentials() {
+  const creds = await checkClovaCredentials();
+  if (!creds) {
+    console.error('저장된 클로바 인증 정보가 없습니다.');
+    return;
+  }
+
+  // 테스트할 API URL과 인증 정보
+  const apiUrl = creds.apiUrl.endsWith('/tts') ? creds.apiUrl : creds.apiUrl + '/tts';
+  const clientId = creds.clientId;
+  const clientSecret = creds.clientSecret;
+
+  // 테스트 요청 생성
+  const formData = new URLSearchParams();
+  formData.append('speaker', 'mijin');
+  formData.append('text', '안녕하세요');
+  formData.append('format', 'mp3');
+  formData.append('speed', 0);
+  formData.append('volume', 0);
+  formData.append('pitch', 0);
+
+  console.log('테스트 URL:', apiUrl);
+  console.log('요청 데이터:', Object.fromEntries(formData));
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-NCP-APIGW-API-KEY-ID": clientId,
+        "X-NCP-APIGW-API-KEY": clientSecret
+      },
+      body: formData
+    });
+
+    console.log('응답 상태:', res.status, res.statusText);
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.error('API 오류:', errorText);
+      return;
+    }
+
+    // 응답 확인 (blob 타입이어야 함)
+    const blob = await res.blob();
+    console.log('응답 타입:', blob.type);
+    console.log('응답 크기:', blob.size, 'bytes');
+
+    // 음성 미리듣기
+    const audioUrl = URL.createObjectURL(blob);
+    const audio = new Audio(audioUrl);
+    console.log('재생을 위해 오디오 객체 생성:', audio);
+    console.log('오디오 URL:', audioUrl);
+    console.log('재생하려면 다음을 실행하세요: audio.play()');
+
+    return { audio, audioUrl };
+  } catch (err) {
+    console.error('API 호출 예외:', err);
+  }
+}
+
+// 디버깅을 위한 설명
+console.log('=== 네이버 클로바 TTS API 디버깅 도구 ===');
+console.log('다음 함수들을 사용할 수 있습니다:');
+console.log('1. checkClovaCredentials() - 저장된 클로바 인증 정보 확인');
+console.log('2. testClovaAPI() - 직접 인증 정보를 입력하여 API 테스트');
+console.log('3. runTestWithCredentials() - 저장된 인증 정보로 API 테스트');
+console.log('주의: testClovaAPI() 함수에서 clientId와 clientSecret을 직접 입력해야 합니다.');
+console.log('실행 예: const result = await runTestWithCredentials(); if (result) result.audio.play();');
