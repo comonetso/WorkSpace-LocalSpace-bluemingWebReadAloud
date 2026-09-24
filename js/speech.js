@@ -4,8 +4,12 @@ function Speech(texts, options) {
   const GOOGLE_NATIVE_END_TIMEOUT = 16*1000
   const chunkRate = options.rate
 
+  //a paragraph gets a '.' at its end so the voice pauses there (line breaks don't make it pause). A selection's lines
+  //(splitParagraphs), which may be read together (CharBreaker), get it whenever they don't end in punctuation
+  //whatever the language; other readings only after latin letters, digits or ')'.
   //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
-  for (var i=0; i<texts.length; i++) if (/[\w)]$/.test(texts[i])) texts[i] += '.';
+  var needsPeriod = options.splitParagraphs ? /[^\s.!?,;:…。！？、，；：]$/ : /[\w)]$/;
+  for (var i=0; i<texts.length; i++) if (needsPeriod.test(texts[i])) texts[i] += '.';
   if (texts.length) texts = getChunks(texts.join("\n\n"));
 
   var self = this;
@@ -415,6 +419,11 @@ function Speech(texts, options) {
   }
 
   function CharBreaker(charLimit, punctuator, paragraphCombineThreshold, keepParagraphsApart) {
+    //keepParagraphsApart (reading a selection) reads every line on its own, except that lines this short
+    //(spaces not counted) go with the next: they're over before the next segment's audio is made, leaving a gap.
+    //Counted in UTF-8 bytes: 20 Korean characters (3 bytes each), or 60 English ones
+    var SHORT_LINE_BYTES = 60;
+    var utf8 = new TextEncoder();
     this.breakText = breakText;
     function breakText(text) {
       return merge(punctuator.getParagraphs(text), breakParagraph, paragraphCombineThreshold, keepParagraphsApart);
@@ -438,11 +447,11 @@ function Speech(texts, options) {
     }
     function merge(parts, breakPart, combineThreshold, keepApart) {
       var result = [];
-      var group = {parts: [], charCount: 0};
+      var group = {parts: [], charCount: 0, spokenBytes: 0};
       var flush = function() {
         if (group.parts.length) {
           result.push(group.parts.join(""));
-          group = {parts: [], charCount: 0};
+          group = {parts: [], charCount: 0, spokenBytes: 0};
         }
       };
       parts.forEach(function(part) {
@@ -453,9 +462,14 @@ function Speech(texts, options) {
           for (var i=0; i<subParts.length; i++) result.push(subParts[i]);
         }
         else {
-          if (keepApart || group.charCount + charCount > (combineThreshold || charLimit)) flush();
+          var full = keepApart
+            ? group.spokenBytes > SHORT_LINE_BYTES || group.charCount + charCount > charLimit
+            : group.charCount + charCount > (combineThreshold || charLimit);
+          if (full) flush();
           group.parts.push(part);
           group.charCount += charCount;
+          //a line's closing '.' isn't counted: Speech() adds one to lines without punctuation
+          if (keepApart) group.spokenBytes += utf8.encode(part.replace(/\s+/g, "").replace(/\.$/, "")).length;
         }
       });
       flush();

@@ -629,7 +629,7 @@ function countSpokenChars(text) {
  *
  * The selected text goes through these steps before it's spoken, and each is replayed here
  * while keeping, for every output character, the offset it came from (-1 = inserted):
- *   1. split into paragraphs         js/player.js      playText()
+ *   1. split into lines (paragraphs) js/player.js      playText()
  *   2. repeated chars / URLs         js/document.js    preprocess()
  *   3. '.' added to paragraph ends   js/speech.js      Speech()
  *   4. paragraphs joined with "\n\n" js/speech.js      Speech()
@@ -639,7 +639,8 @@ function countSpokenChars(text) {
  */
 function alignSegmentsToSource(sourceText, segTexts) {
   let joined = "", joinedSrc = []
-  const separator = /(?:\r?\n){2,}/g
+  //the highlight is only for selections, which playText() splits at every line break (splitParagraphs)
+  const separator = /\s*\r?\n\s*/g
   const paragraphs = []
   let last = 0, match
   while ((match = separator.exec(sourceText))) {
@@ -659,7 +660,8 @@ function alignSegmentsToSource(sourceText, segTexts) {
     if (step.text != truncateRepeatedChars(original, 3).replace(/https?:\/\/\S+/g, "HTTP URL.")) return null
     let text = step.text
     src = step.src
-    if (/[\w)]$/.test(text)) {
+    //same as Speech() in js/speech.js for a selection (splitParagraphs)
+    if (/[^\s.!?,;:…。！？、，；：]$/.test(text)) {
       text += "."
       src.push(-1)
     }

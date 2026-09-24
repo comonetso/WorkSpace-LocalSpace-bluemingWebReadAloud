@@ -166,7 +166,10 @@ function playText(text, opts) {
   opts = opts || {}
   playbackError = null
   if (!activeDoc) {
-    openDoc(new SimpleSource(text.split(/(?:\r?\n){2,}/), {lang: opts.lang, splitParagraphs: opts.splitParagraphs}), function(err) {
+    //reading a selection (splitParagraphs) takes every line on its own, so list items and headings aren't lumped together;
+    //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
+    const paragraphs = text.split(opts.splitParagraphs ? /\s*\r?\n\s*/ : /(?:\r?\n){2,}/)
+    openDoc(new SimpleSource(paragraphs, {lang: opts.lang, splitParagraphs: opts.splitParagraphs}), function(err) {
       if (err) playbackError = err
     }, {sourceText: text})
   }
