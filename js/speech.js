@@ -80,7 +80,7 @@ function Speech(texts, options) {
   this.prepareSegment = async () => {
     const index = playlist.getIndex()
     if (index == null || engine.prefetch == null || movePending) return false
-    const ready = await engine.prefetch(texts[index], options)
+    const ready = await engine.prefetch(spokenOf(texts[index]).text, options)
     return ready === true && !movePending && playlist.getIndex() == index
   }
   this.gotoEnd = () => cmd$.next({name: "gotoEnd"})
@@ -105,18 +105,51 @@ function Speech(texts, options) {
     return browserTtsEngine;
   }
 
+  //what the voice is given for a segment (js/spoken-text.js), while the page shows the segment as it is.
+  //Piper is given the text as it is: it tells where each sentence starts in what it reads (piperState)
+  function spokenOf(text) {
+    if (engine == piperTtsEngine) return {text, sourceIndex: i => i}
+    return spokenText(text)
+  }
+  //if it can't be made, the voice reads the text as it is rather than not at all
+  function spokenText(text) {
+    try {
+      return makeSpokenText(text, options.voice && options.voice.lang || options.lang)
+    }
+    catch (err) {
+      console.error(err)
+      return {text, sourceIndex: i => i}
+    }
+  }
+
   function getChunks(text) {
     var isEA = /^zh|ko|ja/.test(options.lang);
     var punctuator = isEA ? new EastAsianPunctuator() : new LatinPunctuator();
     if (isGoogleNative(options.voice)) {
       var wordLimit = (/^(de|ru|es|pt|id)/.test(options.lang) ? 32 : 36) * (isEA ? 2 : 1) * options.rate;
-      return new WordBreaker(wordLimit, punctuator).breakText(text);
+      return fitSpoken(new WordBreaker(wordLimit, punctuator).breakText(text),
+        text => punctuator.getWords(text).length, wordLimit, limit => new WordBreaker(limit, punctuator));
     }
     else {
-      if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator, null, options.splitParagraphs).breakText(text);
+      if (isGoogleTranslate(options.voice)) {
+        return fitSpoken(new CharBreaker(200, punctuator, null, options.splitParagraphs).breakText(text),
+          text => text.length, 200, limit => new CharBreaker(limit, punctuator, null, options.splitParagraphs));
+      }
       else if (isPiperVoice(options.voice)) return [text];
       else return new CharBreaker(750, punctuator, 200, options.splitParagraphs).breakText(text);
     }
+  }
+
+  //the voice is given the spoken text (spokenText), which can be longer than the segment. Where the engine takes only
+  //so much (Google Translate: 200 chars; Google native voices: the words their end timeout suits), a segment that
+  //grows past it (measure > limit) is broken again, smaller (breakerOf cuts by the same measure)
+  function fitSpoken(chunks, measure, limit, breakerOf) {
+    return chunks.flatMap(chunk => {
+      const size = measure(spokenText(chunk).text), own = measure(chunk)
+      if (size <= limit || own < 2) return [chunk]
+      const smaller = Math.max(1, Math.min(own - 1, Math.floor(own * limit / size)))
+      return fitSpoken(breakerOf(smaller).breakText(chunk), measure, limit, breakerOf)
+    })
   }
 
   async function getState() {
@@ -234,7 +267,7 @@ function Speech(texts, options) {
             }
           } else {
             const nextText = texts[playlist.getIndex() + 1]
-            if (nextText && engine.prefetch != null) engine.prefetch(nextText, options)
+            if (nextText && engine.prefetch != null) engine.prefetch(spokenOf(nextText).text, options)
           }
           break
         case "sentence":
@@ -317,12 +350,24 @@ function Speech(texts, options) {
 
   function makePlayback(text, fromChar) {
     if (engine.stop != null) return makePlaybackLegacy(text, fromChar)
-    else return engine.speak(text, options, playbackState$)
+    else return engine.speak(spokenOf(text).text, options, playbackState$)
   }
 
   //fromChar: speak only the rest of the text; event positions still count from the start of it
   function makePlaybackLegacy(text, fromChar) {
     const from = fromChar > 0 && fromChar < text.length ? fromChar : 0
+    //the rest of the whole segment's spoken text, from where its char "from" is said: a word run together or a
+    //sentence in capitals reads as it did when the segment began (README's "me" isn't spelled out)
+    const spoken = spokenOf(text)
+    let start = 0
+    while (from && start < spoken.text.length && spoken.sourceIndex(start) < from) start++
+    //an event's position in what the voice was given (a word: charIndex and length), in the text
+    const toText = event => {
+      const charIndex = spoken.sourceIndex(start + event.charIndex)
+      const moved = {...event, charIndex}
+      if (event.length > 0) moved.length = spoken.sourceIndex(start + event.charIndex + event.length - 1) + 1 - charIndex
+      return moved
+    }
     return playbackState$.pipe(
       rxjs.distinctUntilChanged(),
       rxjs.scan((playing$, state) => {
@@ -332,9 +377,9 @@ function Speech(texts, options) {
             return playing$
           } else {
             return new rxjs.Observable(observer => {
-              engine.speak(from ? text.slice(from) : text, options, event => {
+              engine.speak(spoken.text.slice(start), options, event => {
                 if (event.type == "error") observer.error(event.error)
-                else observer.next(from && event.charIndex != null ? {...event, charIndex: event.charIndex + from} : event)
+                else observer.next(event.charIndex != null ? toText(event) : event)
               })
             })
           }

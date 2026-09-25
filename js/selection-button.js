@@ -1,5 +1,5 @@
 /*
- * A small green dot shown next to selected text; clicking it reads the selection, the same as the
+ * A small red dot shown next to selected text; clicking it reads the selection, the same as the
  * context menu's "Read selection". On unless turned off in the options, registered on every page by
  * syncSelectionButton() in js/events.js.
  */
@@ -155,7 +155,7 @@
         width: ${DOT}px;
         height: ${DOT}px;
         border-radius: 50%;
-        background: #34c759;
+        background: #ff3b30;
         transition: transform 0.1s;
       }
       button:hover::before {

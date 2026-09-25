@@ -648,31 +648,44 @@ function GoogleWavenetTtsEngine() {
     var endpoint = matches[1] == "Neural2" ? "us-central1-texttospeech.googleapis.com" : "texttospeech.googleapis.com";
     return getSettings(["gcpCreds", "gcpToken"])
       .then(function(settings) {
-        var postData = {
-          input: {
-            text: text
-          },
-          voice: {
-            languageCode: voice.lang,
-            name: voice.lang + "-" + voiceType + "-" + speakerId
-          },
-          audioConfig: {
-            audioEncoding: "OGG_OPUS",
+        function synthesize(input) {
+          var postData = {
+            input: input,
+            voice: {
+              languageCode: voice.lang,
+              name: voice.lang + "-" + voiceType + "-" + speakerId
+            },
+            audioConfig: {
+              audioEncoding: "OGG_OPUS",
+            }
           }
+          if (!voiceType.startsWith("Chirp")) postData.audioConfig.pitch = ((pitch || 1) -1) *20;
+          if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json");
+          if (!settings.gcpToken) throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
+          return ajaxPost("https://cxl-services.appspot.com/proxy?url=https://texttospeech.googleapis.com/v1beta1/text:synthesize&token=" + settings.gcpToken, postData, "json")
+            .catch(function(err) {
+              console.error(err);
+              throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
+            })
         }
-        if (!voiceType.startsWith("Chirp")) postData.audioConfig.pitch = ((pitch || 1) -1) *20;
-        if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json");
-        if (!settings.gcpToken) throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
-        return ajaxPost("https://cxl-services.appspot.com/proxy?url=https://texttospeech.googleapis.com/v1beta1/text:synthesize&token=" + settings.gcpToken, postData, "json")
-          .catch(function(err) {
-            console.error(err);
-            throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
-          })
+        const markup = commaPauses(text, voice, voiceType)
+        //if the pauses are refused, it's read without them rather than not at all
+        return markup ? synthesize({markup: markup}).catch(function(err) {
+          console.error(err);
+          return synthesize({text: text});
+        }) : synthesize({text: text});
       })
       .then(function(responseText) {
         var data = JSON.parse(responseText);
         return "data:audio/ogg;codecs=opus;base64," + data.audioContent;
       })
+  }
+  //Korean Chirp 3 HD voices hardly pause at a comma (0.29s: less than between two clauses without one), so a short
+  //pause is asked for after each comma of a sentence ("[pause short]" in markup: 0.41s, chosen by ear 2026-09-26).
+  //The text's own brackets become parentheses, so that none is taken for a tag. Null where it doesn't apply
+  function commaPauses(text, voice, voiceType) {
+    if (voiceType != "Chirp3-HD" || !/^ko/i.test(voice.lang) || !/,\s/.test(text)) return null;
+    return text.replace(/\[/g, "(").replace(/\]/g, ")").replace(/,(?=\s)/g, ", [pause short]");
   }
   var voices = [
     {"voiceName":"GoogleStandard Spanish; Castilian (Anna)","lang":"es-ES","gender":"female"},

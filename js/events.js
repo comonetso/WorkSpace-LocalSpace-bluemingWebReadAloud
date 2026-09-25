@@ -60,7 +60,7 @@ async function installContentScripts() {
 }
 
 /**
- * The green dot next to selected text (js/selection-button.js). On unless turned off in the options;
+ * The red dot next to selected text (js/selection-button.js). On unless turned off in the options;
  * it needs access to all sites (host_permissions), and is registered only while it's on and allowed.
  */
 const SELECTION_BUTTON_SCRIPT = {
@@ -138,7 +138,7 @@ brapi.contextMenus.onClicked.addListener(function(info, tab) {
       .catch(handleHeadlessError)
 })
 
-//the green dot next to selected text (js/selection-button.js): the frame that sent it has the selection
+//the red dot next to selected text (js/selection-button.js): the frame that sent it has the selection
 brapi.runtime.onMessage.addListener(function(request, sender) {
   if (request.dest == "readSelection" && sender.tab)
     readSelectionInTab(sender.tab, sender.frameId, request.text)
@@ -254,8 +254,9 @@ var currentTask = {
 }
 
 async function playText(text, opts, ui) {
-  const hasPlayer = await stop().then(res => res == true, err => false)
-  if (!hasPlayer) await injectPlayer(await getActiveTab())
+  //the player goes inside the page read from (a selection's tab), which may not be the active one
+  const tab = ui && await getTab(ui.tabId) || await getActiveTab()
+  if (!await readyPlayer(tab)) await injectPlayer(tab)
   if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playText", args: [text, opts]})
 }
@@ -285,10 +286,22 @@ async function playTab(tabId) {
     task.end()
   }
 
-  const hasPlayer = await stop().then(res => res == true, err => false)
-  if (!hasPlayer) await injectPlayer(tab)
+  if (!await readyPlayer(tab)) await injectPlayer(tab)
   if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playTab"})
+}
+
+//stops the player; true if it's there to read in this tab. One inside another page is closed instead: that page
+//going (closed, or elsewhere) would stop the reading
+async function readyPlayer(tab) {
+  const hasPlayer = await stop().then(res => res == true, err => false)
+  if (!hasPlayer) return false
+  const where = await sendToPlayer({method: "getPlayerTab"}).catch(err => null)
+  if (where && where.embedded && tab && where.tabId != tab.id) {
+    await sendToPlayer({method: "close"}).catch(console.error)
+    return false
+  }
+  return true
 }
 
 
@@ -569,10 +582,12 @@ async function injectContentScript(tab, frameId, extraScripts) {
   console.info("Content handler", files)
 }
 
+//the player goes inside the page being read, out of sight, unless the tab was chosen in the options
+//(useEmbeddedPlayer false) or Piper voices need it; pages it can't go into get the tab
 async function injectPlayer(tab) {
   const settings = await getSettings(["useEmbeddedPlayer", "piperVoices"])
   const promise = new Promise(f => handlers.playerCheckIn = f)
-  if (tab && settings.useEmbeddedPlayer && (settings.piperVoices || []).length == 0) {
+  if (tab && settings.useEmbeddedPlayer !== false && canUseEmbeddedPlayer() && (settings.piperVoices || []).length == 0) {
     try {
       if (tab.incognito) {
         //https://developer.chrome.com/docs/extensions/mv3/manifest/incognito/
@@ -580,7 +595,8 @@ async function injectPlayer(tab) {
       }
       await brapi.scripting.executeScript({
         target: {tabId: tab.id},
-        func: createPlayerFrame
+        func: createPlayerFrame,
+        args: [tab.id],
       })
     }
     catch (err) {
@@ -594,17 +610,22 @@ async function injectPlayer(tab) {
   await promise
 }
 
-function createPlayerFrame() {
+//tabId: the tab it's in, which the player tells (getPlayerTab)
+function createPlayerFrame(tabId) {
   const brapi = (typeof chrome != 'undefined') ? chrome : (typeof browser != 'undefined' ? browser : {})
   const frame = document.createElement("iframe")
-  frame.src = brapi.runtime.getURL("player.html")
+  frame.src = brapi.runtime.getURL("player.html?tab=" + tabId)
   frame.style.position = "absolute"
   frame.style.height = "0"
   frame.style.borderWidth = "0"
   document.body.appendChild(frame)
 }
 
+//only ever one: a player tab still there didn't answer (injectPlayer is called when none did), so it goes
 async function createPlayerTab() {
+  const playerUrl = brapi.runtime.getURL("player.html")
+  const left = (await brapi.tabs.query({})).filter(tab => (tab.url || tab.pendingUrl || "").startsWith(playerUrl))
+  if (left.length) await brapi.tabs.remove(left.map(tab => tab.id)).catch(console.error)
   const tab = await brapi.tabs.create({
     url: brapi.runtime.getURL("player.html?autoclose"),
     index: 0,

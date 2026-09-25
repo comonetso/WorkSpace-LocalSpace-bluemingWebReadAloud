@@ -197,7 +197,8 @@
 
 
 
-  //audioPlayback
+  //audioPlayback: inside the page unless the tab was chosen (useEmbeddedPlayer false). Shown to those playing
+  //inside the page, so they can go back to the tab; the tab offers the way back itself ("hide this tab")
   Promise.all([brapi.storage.local.get(["useEmbeddedPlayer"]), domReadyPromise])
     .then(([settings]) => {
       $("#audio-playback")
@@ -206,17 +207,17 @@
           brapi.runtime.sendMessage({ dest: "player", method: "close" })
             .catch(err => "OK")
         })
-      $(".audio-playback-visible").toggle(settings.useEmbeddedPlayer ? true : false)
+      $(".audio-playback-visible").toggle(settings.useEmbeddedPlayer !== false)
     })
 
   rxjs.combineLatest([observeSetting("useEmbeddedPlayer"), domReadyPromise])
     .subscribe(([useEmbeddedPlayer]) => {
-      $("#audio-playback").val(useEmbeddedPlayer ? "true" : "false")
+      $("#audio-playback").val(useEmbeddedPlayer !== false ? "true" : "false")
     })
 
 
 
-  //selectionButton: green dot next to selected text (js/selection-button.js), on unless turned off here.
+  //selectionButton: red dot next to selected text (js/selection-button.js), on unless turned off here.
   //It runs on every page: turning it on asks again for access to all sites in case the browser's extension
   //settings limited it. The service worker registers it (syncSelectionButton)
   domReadyPromise

@@ -120,6 +120,8 @@ var messageHandlers = {
   rewind: rewind,
   seek: seek,
   close: closePlayer,
+  //inside a page (not a tab of its own): which tab it's in (js/events.js readyPlayer)
+  getPlayerTab: () => ({embedded: isEmbedded, tabId: isEmbedded ? Number(queryString.get("tab")) || null : null}),
   shouldPlaySilence: shouldPlaySilence.bind({}),
   startPairing: () => phoneTtsEngine.startPairing(),
   isPaired: () => phoneTtsEngine.isPaired(),
@@ -145,8 +147,9 @@ document.addEventListener("DOMContentLoaded", initialize)
 async function initialize() {
   setI18nText()
 
+  //only when the tab was chosen in the options: otherwise this tab is here because the page couldn't take the player
   $("#hidethistab-link")
-    .toggle(canUseEmbeddedPlayer() && !(await getSettings()).useEmbeddedPlayer)
+    .toggle(canUseEmbeddedPlayer() && (await getSettings()).useEmbeddedPlayer === false)
     .click(function() {
       $("#dialog-backdrop, #hidethistab-dialog").show()
     })
