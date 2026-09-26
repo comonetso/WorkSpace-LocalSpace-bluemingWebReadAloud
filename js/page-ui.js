@@ -20,6 +20,7 @@
   let bar = null
   let highlight = null
   let captured = null
+  let docSpans = null
 
   window.__readAloudHrgUi = {
     isAlive,
@@ -27,6 +28,7 @@
     captureSelection,
     startBar,
     startHighlight,
+    docMapChanged,
   }
 
 
@@ -43,6 +45,7 @@
     removeBar()
     removeHighlight()
     captured = null
+    docSpans = null
   }
 
 
@@ -78,9 +81,12 @@
    * Walks the selected text nodes alongside selection.toString(), pairing their visible
    * characters in order. Whitespace is compared loosely because toString() reflows it.
    * Stops at the first real mismatch; everything before it stays mappable.
+   * lenient (whole-page reading, whose text is innerText plus inserted characters — a '.' added
+   * to a line, list numbering): a mismatched character is taken as inserted and skipped on the
+   * text side only, and the walk goes on.
    */
-  function mapTextToNodes(text, range) {
-    const nodes = selectedTextNodes(range)
+  function mapTextToNodes(text, range, lenient, dropNode) {
+    const nodes = selectedTextNodes(range, dropNode)
     const nodeOf = new Int32Array(text.length).fill(-1)
     const offsetOf = new Int32Array(text.length).fill(-1)
     let ni = 0
@@ -100,7 +106,11 @@
         ni++
         if (ni < nodes.length) off = nodes[ni].start
       }
-      if (!found || !sameChar(nodes[ni].node.nodeValue[off], c)) break
+      if (!found) break
+      if (!sameChar(nodes[ni].node.nodeValue[off], c)) {
+        if (lenient) continue
+        break
+      }
       nodeOf[i] = ni
       offsetOf[i] = off
       off++
@@ -109,12 +119,14 @@
     return mapped ? {nodes, nodeOf, offsetOf} : null
   }
 
-  //text nodes whose text selection.toString() includes: laid out, visible and selectable
-  function selectedTextNodes(range) {
+  //text nodes whose text selection.toString() includes: laid out, visible and selectable.
+  //dropNode: an extra exclusion (whole-page reading drops what the extraction didn't read)
+  function selectedTextNodes(range, dropNode) {
     const result = []
     const cache = new Map()
     const add = node => {
       if (!node.nodeValue || !isInSelectionText(node, cache)) return
+      if (dropNode && dropNode(node, cache)) return
       const start = node == range.startContainer ? range.startOffset : 0
       const end = node == range.endContainer ? range.endOffset : node.nodeValue.length
       if (start < end) result.push({node, start, end})
@@ -185,14 +197,21 @@
 
   //highlight --------------------------------------------------------------------
 
-  function startHighlight(sessionId) {
+  //opts.doc: whole-page reading — offsets refer to the extracted paragraphs (js/content/html-doc.js
+  //publishDocMap) joined with "\n\n", and whole paragraphs are lit, not characters
+  function startHighlight(sessionId, opts) {
     removeHighlight()
-    if (!captured || captured.sessionId != sessionId || typeof CSS == "undefined" || !CSS.highlights) return false
+    const isDoc = !!(opts && opts.doc)
+    if (typeof CSS == "undefined" || !CSS.highlights) return false
+    if (!isDoc && (!captured || captured.sessionId != sessionId)) return false
     const port = brapi.runtime.connect({name: PORT_NAME})
-    highlight = {port}
+    highlight = {port, doc: isDoc, lastMsg: null}
     port.onMessage.addListener(msg => {
       if (!highlight || highlight.port != port) return
-      if (msg.type == "highlight" && captured && captured.sessionId == sessionId) applyHighlight(msg)
+      if (msg.type == "highlight") {
+        if (isDoc) applyDocHighlight(msg)
+        else if (captured && captured.sessionId == sessionId) applyHighlight(msg)
+      }
       else if (msg.type == "end") removeHighlight()
     })
     port.onDisconnect.addListener(() => {
@@ -200,6 +219,122 @@
     })
     port.postMessage({type: "hello", sessionId, role: "highlight"})
     return true
+  }
+
+  //the extraction runs after the highlight session starts: redo the waiting update with the new map
+  function docMapChanged() {
+    docSpans = null
+    if (highlight && highlight.doc && highlight.lastMsg) applyDocHighlight(highlight.lastMsg)
+  }
+
+  //offset spans of the extracted paragraphs in their "\n\n"-joined text, with each one's element;
+  //must count the same way as alignSegmentsToParas() in js/page-ui-host.js
+  function getDocSpans() {
+    if (docSpans) return docSpans
+    const map = window.__readAloudHrgDocMap
+    if (!map || !map.texts) return null
+    docSpans = []
+    let off = 0
+    for (let i = 0; i < map.texts.length; i++) {
+      if (i > 0) off += 2
+      docSpans.push({start: off, end: off + map.texts[i].length, text: map.texts[i], elem: map.elements[i]})
+      off += map.texts[i].length
+    }
+    resolveSharedElements(docSpans, map.ignore)
+    return docSpans
+  }
+
+  //find each paragraph's place inside its element, so reading it lights its own text only —
+  //not the whole element (a figure's image around its caption, an article container holding
+  //several paragraphs). Elements shared by several paragraphs are walked once
+  function resolveSharedElements(spans, ignoreSelector) {
+    for (let i = 0; i < spans.length; ) {
+      let j = i
+      while (j + 1 < spans.length && spans[j + 1].elem == spans[i].elem) j++
+      if (spans[i].elem && spans[i].elem.isConnected) mapSharedGroup(spans, i, j, ignoreSelector)
+      i = j + 1
+    }
+  }
+
+  function mapSharedGroup(spans, i, j, ignoreSelector) {
+    try {
+      const range = document.createRange()
+      range.selectNodeContents(spans[i].elem)
+      const cache = new Map()
+      //drop what the extraction didn't read (getTexts() in js/content/html-doc.js hides these)
+      const dropNode = node => {
+        const parent = node.parentElement
+        if (!parent) return false
+        if (ignoreSelector && parent.closest(ignoreSelector)) return true
+        return isFloatedAside(parent, cache)
+      }
+      let joined = ""
+      for (let k = i; k <= j; k++) joined += (k > i ? "\n" : "") + spans[k].text
+      const map = mapTextToNodes(joined, range, true, dropNode)
+      if (!map) return
+      let off = 0
+      for (let k = i; k <= j; k++) {
+        //per text node, so nothing between them (an image between a paragraph's lines) is lit
+        spans[k].runs = nodeRunsIn(map, off, off + spans[k].text.length)
+        off += spans[k].text.length + 1
+      }
+    }
+    catch (err) {
+      console.error(err)
+    }
+  }
+
+  //dontRead() in js/content/html-doc.js: floated-right and fixed content isn't read
+  function isFloatedAside(elem, cache) {
+    if (!elem) return false
+    const cached = cache.get(elem)
+    if (cached && "aside" in cached) return cached.aside
+    const style = getComputedStyle(elem)
+    const result = style.float == "right" || style.position == "fixed" || isFloatedAside(elem.parentElement, cache)
+    cache.set(elem, {...cache.get(elem), aside: result})
+    return result
+  }
+
+  function applyDocHighlight(msg) {
+    highlight.lastMsg = msg
+    const spans = getDocSpans()
+    if (!spans) return
+    const ranges = msg.para ? docRangesFor(spans, msg.para) : []
+    if (ranges.length) CSS.highlights.set(HIGHLIGHT_PARA, new Highlight(...ranges))
+    else CSS.highlights.delete(HIGHLIGHT_PARA)
+    //word positions aren't mapped for whole-page reading (paragraph precision only)
+    CSS.highlights.delete(HIGHLIGHT_WORD)
+    if (msg.scroll && ranges.length) revealRanges(ranges)
+  }
+
+  //[from, to) offsets in the joined text -> the overlapped paragraphs as ranges: the paragraph's own
+  //text stretches when mapped (runs), otherwise the whole element
+  function docRangesFor(spans, span) {
+    const [from, to] = span
+    const ranges = []
+    const seen = new Set()
+    for (const s of spans) {
+      if (s.end <= from || s.start >= to) continue
+      try {
+        const runs = s.runs && s.runs.filter(r => r.node.isConnected && r.end <= r.node.nodeValue.length)
+        if (runs && runs.length) {
+          for (const r of runs) {
+            const range = document.createRange()
+            range.setStart(r.node, r.start)
+            range.setEnd(r.node, r.end)
+            ranges.push(range)
+          }
+          continue
+        }
+        if (!s.elem || !s.elem.isConnected || seen.has(s.elem)) continue
+        seen.add(s.elem)
+        const range = document.createRange()
+        range.selectNodeContents(s.elem)
+        ranges.push(range)
+      }
+      catch (err) {}
+    }
+    return ranges
   }
 
   function removeHighlight() {
@@ -221,7 +356,7 @@
     setHighlight(HIGHLIGHT_PARA, paraRange)
     setHighlight(HIGHLIGHT_WORD, wordRange)
     if (paraRange || wordRange) releaseSelection()
-    if (msg.scroll && paraRange) revealRange(paraRange)
+    if (msg.scroll && paraRange) revealRanges([paraRange])
   }
 
   function setHighlight(name, range) {
@@ -232,17 +367,40 @@
   //[from, to) offsets in the captured text -> DOM range
   function rangeFor(span) {
     if (!span) return null
-    const [from, to] = span
+    return rangeIn(captured, span[0], span[1])
+  }
+
+  //[from, to) offsets in a mapped text -> one stretch per text node ({node, start, end})
+  function nodeRunsIn(map, from, to) {
+    const runs = []
+    let cur = null
+    for (let idx = from; idx < to && idx < map.nodeOf.length; idx++) {
+      const ni = map.nodeOf[idx]
+      if (ni < 0) continue
+      const off = map.offsetOf[idx]
+      if (cur && cur.ni == ni) {
+        cur.end = off + 1
+      }
+      else {
+        cur = {ni, node: map.nodes[ni].node, start: off, end: off + 1}
+        runs.push(cur)
+      }
+    }
+    return runs.length ? runs : null
+  }
+
+  //[from, to) offsets in a mapped text ({nodes, nodeOf, offsetOf}) -> DOM range
+  function rangeIn(map, from, to) {
     let a = from
-    while (a < to && captured.nodeOf[a] < 0) a++
+    while (a < to && map.nodeOf[a] < 0) a++
     let b = to - 1
-    while (b >= a && captured.nodeOf[b] < 0) b--
+    while (b >= a && map.nodeOf[b] < 0) b--
     if (a >= to || b < a) return null
-    const startNode = captured.nodes[captured.nodeOf[a]].node
-    const endNode = captured.nodes[captured.nodeOf[b]].node
-    const startOffset = captured.offsetOf[a]
-    const endOffset = captured.offsetOf[b] + 1
-    //the page may have changed since the selection was captured
+    const startNode = map.nodes[map.nodeOf[a]].node
+    const endNode = map.nodes[map.nodeOf[b]].node
+    const startOffset = map.offsetOf[a]
+    const endOffset = map.offsetOf[b] + 1
+    //the page may have changed since the text was mapped
     if (!startNode.isConnected || !endNode.isConnected) return null
     if (startOffset > startNode.nodeValue.length || endOffset > endNode.nodeValue.length) return null
     const range = document.createRange()
@@ -268,11 +426,17 @@
     }
   }
 
-  //scroll so the first line of the paragraph being read is visible (not hidden under the bar)
-  function revealRange(range) {
-    const line = range.getClientRects()[0]
-    if (!line) return
-    const container = scrollableAncestor(range.startContainer.parentElement)
+  //scroll so the whole paragraph being read is visible — its last line included, which the
+  //playback bar at the bottom would otherwise cover
+  function revealRanges(ranges) {
+    let rect = null
+    for (const range of ranges) {
+      const b = range.getBoundingClientRect()
+      if (!b || (b.width == 0 && b.height == 0)) continue
+      rect = rect ? {top: Math.min(rect.top, b.top), bottom: Math.max(rect.bottom, b.bottom)} : {top: b.top, bottom: b.bottom}
+    }
+    if (!rect) return
+    const container = scrollableAncestor(ranges[0].startContainer.parentElement)
     const view = container ? container.getBoundingClientRect() : {top: 0, bottom: window.innerHeight, height: window.innerHeight}
     //the bar lives in the top frame: a subframe (e.g. a blog whose article is a full-page iframe)
     //can't see it, so it counts the bar's height at the bottom as covered
@@ -281,8 +445,13 @@
       : Infinity
     const visibleTop = view.top
     const visibleBottom = Math.min(view.bottom, window.innerHeight, barTop)
-    if (line.top >= visibleTop && line.bottom <= visibleBottom) return
-    const delta = line.top - (visibleTop + (visibleBottom - visibleTop - line.height) / 2)
+    if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return
+    const height = rect.bottom - rect.top
+    const visible = visibleBottom - visibleTop
+    //centered when it fits; a paragraph taller than the view starts at the top instead
+    const delta = height <= visible
+      ? rect.top - (visibleTop + (visible - height) / 2)
+      : rect.top - visibleTop
     if (container) container.scrollBy({top: delta, behavior: "smooth"})
     else window.scrollBy({top: delta, behavior: "smooth"})
   }

@@ -13,6 +13,8 @@
       title: document.title,
       lang: getLang(),
       singlePage: typeof readAloudDoc != "undefined" && !!readAloudDoc.isSinglePage,
+      //html-doc extracts one line per text: read like a selection (getSpeech in js/document.js)
+      splitParagraphs: typeof readAloudDoc != "undefined" && !!readAloudDoc.splitParagraphs,
     }
   }
 
@@ -51,7 +53,8 @@
         && location.port === "1122"
         && location.protocol === "http:"
         && location.pathname === "/bookshelf/index.html") return  ["js/content/yd-app-web.js"];
-    else return ["js/content/html-doc.js"];
+    //readability.js: reader-mode filter for whole-page reading (html-doc.js findArticleElements)
+    else return ["js/readability.js", "js/content/html-doc.js"];
   }
 
   async function getCurrentIndex() {

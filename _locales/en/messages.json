@@ -229,5 +229,14 @@
   },
   "selection_button_title": {
     "message": "Read the selected text"
+  },
+  "options_icon_popup": {
+    "message": "Clicking the toolbar icon opens the popup"
+  },
+  "options_icon_popup_off": {
+    "message": "Off (read directly)"
+  },
+  "options_icon_popup_on": {
+    "message": "On"
   }
 }

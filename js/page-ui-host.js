@@ -38,9 +38,13 @@ const pageUiHost = immediate(() => {
     session = {
       id: ui.sessionId,
       highlight: !!ui.highlight,
+      //whole-page reading: paragraph-level highlight from the extracted paragraphs (sourceParas),
+      //which arrive with onSpeech once the page's text is extracted
+      docHighlight: !!ui.docHighlight,
       ports: {},
       doc: null,
       sourceText: null,
+      sourceParas: null,
       speech: null,
       subs: [],
       state: "LOADING",
@@ -174,6 +178,7 @@ const pageUiHost = immediate(() => {
     s.swapToken = null
     s.word = null
     s.segTexts = null
+    if (s.docHighlight && info.sourceParas) s.sourceParas = info.sourceParas
     updateSegments(speech.getInfo().texts)
     s.subs.push(speech.state$.subscribe(onState))
     s.subs.push(speech.events$.subscribe({
@@ -308,12 +313,14 @@ const pageUiHost = immediate(() => {
     s.segTexts = texts
     s.timing.setSegments(texts)
     s.alignment = null
-    if (s.sourceText) {
+    if (s.sourceText || s.sourceParas) {
       try {
-        s.alignment = alignSegmentsToSource(s.sourceText, texts)
+        s.alignment = s.sourceText
+          ? alignSegmentsToSource(s.sourceText, texts)
+          : alignSegmentsToParas(s.sourceParas, texts, !!(s.speech && s.speech.options.splitParagraphs))
       }
       catch (err) {
-        console.error("Cannot map segments to the selected text", err)
+        console.error("Cannot map segments to the source text", err)
       }
     }
     s.lastHighlight = null
@@ -375,7 +382,8 @@ const pageUiHost = immediate(() => {
     let para = null, word = null
     if (s.alignment) {
       para = s.alignment.segmentRange(index)
-      if (s.word && s.word.index == index) word = s.alignment.wordRange(index, s.word.charIndex, s.word.length)
+      //whole-page reading lights whole paragraphs: a word offset would light its paragraph anyway
+      if (!s.docHighlight && s.word && s.word.index == index) word = s.alignment.wordRange(index, s.word.charIndex, s.word.length)
     }
     const key = JSON.stringify([index, para, word])
     if (!force && s.lastHighlight && s.lastHighlight.key == key) return
@@ -625,11 +633,12 @@ function countSpokenChars(text) {
 
 
 /**
- * Maps every segment the engine reads back to character offsets in the selected text.
+ * Maps every segment the engine reads back to character offsets in the source text — the selected
+ * text (alignSegmentsToSource) or the extracted paragraphs of whole-page reading (alignSegmentsToParas).
  *
- * The selected text goes through these steps before it's spoken, and each is replayed here
+ * The source goes through these steps before it's spoken, and each is replayed here
  * while keeping, for every output character, the offset it came from (-1 = inserted):
- *   1. split into lines (paragraphs) js/player.js      playText()
+ *   1. split into paragraphs         js/player.js      playText() (selections only)
  *   2. repeated chars / URLs         js/document.js    preprocess()
  *   3. '.' added to paragraph ends   js/speech.js      Speech()
  *   4. paragraphs joined with "\n\n" js/speech.js      Speech()
@@ -638,30 +647,54 @@ function countSpokenChars(text) {
  * against it in order. If anything doesn't line up, returns null and the page shows no highlight.
  */
 function alignSegmentsToSource(sourceText, segTexts) {
-  let joined = "", joinedSrc = []
-  //the highlight is only for selections, which playText() splits at every line break (splitParagraphs)
+  //selections: playText() splits them at every line break (splitParagraphs)
   const separator = /\s*\r?\n\s*/g
   const paragraphs = []
   let last = 0, match
   while ((match = separator.exec(sourceText))) {
-    paragraphs.push([last, match.index])
+    paragraphs.push({text: sourceText.slice(last, match.index), offset: last})
     last = match.index + match[0].length
   }
-  paragraphs.push([last, sourceText.length])
+  paragraphs.push({text: sourceText.slice(last), offset: last})
+  //the '.' rule of Speech() in js/speech.js for a selection (splitParagraphs)
+  return alignParagraphs(paragraphs, /[^\s.!?,;:…。！？、，；：]$/, segTexts)
+}
+
+//whole-page reading: the source is the extracted paragraphs themselves, and offsets refer to them
+//joined with "\n\n" — the page side (getDocSpans() in js/page-ui.js) counts the same way.
+//splitParagraphs: they're read like a selection (html-doc), with its wider '.' rule
+function alignSegmentsToParas(sourceParas, segTexts, splitParagraphs) {
+  const paragraphs = []
+  let off = 0
+  for (let i = 0; i < sourceParas.length; i++) {
+    if (i > 0) off += 2
+    paragraphs.push({text: sourceParas[i], offset: off})
+    off += sourceParas[i].length
+  }
+  //the '.' rules of Speech() in js/speech.js
+  return alignParagraphs(paragraphs, splitParagraphs ? /[^\s.!?,;:…。！？、，；：]$/ : /[\w)]$/, segTexts)
+}
+
+/**
+ * Maps every segment the engine reads back to character offsets in the source text —
+ * paragraphs at the given offsets in it, transformed as described in the header comment above.
+ */
+function alignParagraphs(paragraphs, needsPeriod, segTexts) {
+  let joined = "", joinedSrc = []
 
   for (let i = 0; i < paragraphs.length; i++) {
-    const [start, end] = paragraphs[i]
-    const original = sourceText.slice(start, end)
+    const original = paragraphs[i].text
+    const base = paragraphs[i].offset
     let src = []
-    for (let k = start; k < end; k++) src.push(k)
+    for (let k = 0; k < original.length; k++) src.push(base + k)
     let step = truncateRepeatedCharsTracked(original, src, 3)
     step = replaceUrlsTracked(step.text, step.src)
     //must stay identical to preprocess() in js/document.js
     if (step.text != truncateRepeatedChars(original, 3).replace(/https?:\/\/\S+/g, "HTTP URL.")) return null
     let text = step.text
     src = step.src
-    //same as Speech() in js/speech.js for a selection (splitParagraphs)
-    if (/[^\s.!?,;:…。！？、，；：]$/.test(text)) {
+    //the '.' added to paragraph ends by Speech() in js/speech.js
+    if (needsPeriod.test(text)) {
       text += "."
       src.push(-1)
     }

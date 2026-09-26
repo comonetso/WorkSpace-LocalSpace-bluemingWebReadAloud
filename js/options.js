@@ -240,6 +240,23 @@
 
 
 
+  //iconOpensPopup: the toolbar icon opens the popup instead of reading the page directly.
+  //Off by default (2026-09-26 user decision); the service worker applies it (syncIconPopup)
+  domReadyPromise
+    .then(() => {
+      $("#icon-popup")
+        .change(function () {
+          updateSettings({ iconOpensPopup: $(this).val() == "true" })
+        })
+    })
+
+  rxjs.combineLatest([observeSetting("iconOpensPopup"), domReadyPromise])
+    .subscribe(([iconOpensPopup]) => {
+      $("#icon-popup").val(iconOpensPopup === true ? "true" : "false")
+    })
+
+
+
   //buttons
   domReadyPromise
     .then(() => {

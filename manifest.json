@@ -8,9 +8,7 @@
   "default_locale": "en",
   "minimum_chrome_version": "99",
 
-  "action": {
-    "default_popup": "popup.html?isPopup=1"
-  },
+  "action": {},
   "icons": {
     "16": "img/icon-16.png",
     "48": "img/icon-48.png",

@@ -193,6 +193,7 @@ function Doc(source, onEnd) {
   }
 
   async function read(texts, rewinded) {
+    const sourceParas = texts   //before preprocess: the whole-page highlight aligns against these
     texts = texts.map(preprocess)
     if (info.detectedLang == null) {
       const lang = await detectLanguage(texts)
@@ -201,7 +202,7 @@ function Doc(source, onEnd) {
     }
     if (activeSpeech) return;
     activeSpeech = await getSpeech(texts);
-    if (self.onSpeech) self.onSpeech(activeSpeech, {pageIndex: currentIndex, singlePage: !!info.singlePage || currentIndex == -100})
+    if (self.onSpeech) self.onSpeech(activeSpeech, {pageIndex: currentIndex, singlePage: !!info.singlePage || currentIndex == -100, sourceParas})
     await wait(playbackState, "resumed")
     activeSpeech.onEnd = function(err) {
       if (err) {

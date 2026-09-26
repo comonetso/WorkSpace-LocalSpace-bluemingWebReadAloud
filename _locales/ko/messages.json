@@ -52,5 +52,14 @@
   },
   "selection_button_title": {
     "message": "선택한 글 읽기"
+  },
+  "options_icon_popup": {
+    "message": "확장 아이콘 클릭 시 팝업 열기"
+  },
+  "options_icon_popup_off": {
+    "message": "끄기 (바로 읽기)"
+  },
+  "options_icon_popup_on": {
+    "message": "켜기"
   }
 }

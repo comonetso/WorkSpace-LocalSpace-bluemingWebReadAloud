@@ -6,6 +6,53 @@ brapi.runtime.onInstalled.addListener(function() {
   syncSelectionButton(true)
 })
 
+/**
+ * Toolbar icon. By default it reads the page directly, without the popup (2026-09-26 user decision);
+ * the popup can be brought back in the options (iconOpensPopup), e.g. for its highlight window.
+ * setPopup doesn't outlive the service worker reliably, so it's set again whenever the worker starts.
+ */
+syncIconPopup()
+
+brapi.storage.onChanged.addListener(function(changes) {
+  if (changes.iconOpensPopup) syncIconPopup()
+})
+
+async function syncIconPopup() {
+  try {
+    const {iconOpensPopup} = await getSettings(["iconOpensPopup"])
+    await brapi.action.setPopup({popup: iconOpensPopup === true ? "popup.html?isPopup=1" : ""})
+  }
+  catch (err) {
+    console.error("Cannot sync the icon popup", err)
+  }
+}
+
+//no popup set: a click reads the clicked tab. On the tab being read it pauses/resumes;
+//on another tab it ends that reading and starts this tab's (2026-09-26 user decision)
+if (brapi.action)
+brapi.action.onClicked.addListener(function(tab) {
+  Promise.all([getPlaybackState(), getReadingTabId()])
+    .then(function([stateInfo, readingTabId]) {
+      const sameTab = tab && tab.id != null && tab.id == readingTabId
+      switch (stateInfo.state) {
+        case "PLAYING": return sameTab ? pause() : playTab(tab && tab.id)
+        case "PAUSED": return sameTab ? resume() : playTab(tab && tab.id)
+        case "STOPPED": return playTab(tab && tab.id)
+      }
+    })
+    .catch(handleHeadlessError)
+})
+
+//the tab being (or paused while being) read: the embedded player sits inside it; a player tab
+//of its own doesn't tell, then the last whole-page source (sourceUri) does
+async function getReadingTabId() {
+  const where = await sendToPlayer({method: "getPlayerTab"}).catch(err => null)
+  if (where && where.embedded && where.tabId != null) return where.tabId
+  const {sourceUri} = await brapi.storage.local.get("sourceUri")
+  if (sourceUri && sourceUri.startsWith("contentscript:")) return Number(sourceUri.substr(14))
+  return null
+}
+
 
 /**
  * IPC handlers
@@ -279,7 +326,9 @@ async function playTab(tabId) {
       const frameId = handler.getFrameId && await getAllFrames(tab.id).then(frames => handler.getFrameId(frames))
       if (!await contentScriptAlreadyInjected(tab, frameId)) await injectContentScript(tab, frameId, handler.extraScripts)
       await brapi.storage.local.set({"sourceUri": "contentscript:" + tab.id})
-      ui = {sessionId: newPageUiSessionId(), tabId: tab.id}
+      //docHighlight: the source highlight over the page, like selection reading; documents whose
+      //content script leaves no paragraph map (js/content/html-doc.js) just show no highlight
+      ui = {sessionId: newPageUiSessionId(), tabId: tab.id, highlight: true, docHighlight: true, highlightFrameId: frameId || 0}
     }
   }
   finally {
@@ -375,7 +424,13 @@ async function showPageHighlight(ui) {
   try {
     const target = {tabId: ui.tabId, frameIds: [ui.highlightFrameId]}
     await brapi.scripting.insertCSS({target, css: PAGE_UI_HIGHLIGHT_CSS})
-    await brapi.scripting.executeScript({target, func: id => window.__readAloudHrgUi.startHighlight(id), args: [ui.sessionId]})
+    //whole-page reading hasn't injected it yet (selection reading does in captureSelection)
+    await brapi.scripting.executeScript({target, files: ["js/page-ui.js"]})
+    await brapi.scripting.executeScript({
+      target,
+      func: (id, doc) => window.__readAloudHrgUi.startHighlight(id, doc ? {doc: true} : undefined),
+      args: [ui.sessionId, !!ui.docHighlight],
+    })
   }
   catch (err) {
     console.warn("Cannot highlight the selection on page", err)
