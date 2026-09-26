@@ -72,3 +72,4 @@
 [MIT](LICENSE)
 
 함께 들어 있는 외부 라이브러리(Mozilla Readability, jQuery, RxJS 등)와 영어 단어 목록(SCOWL)은 각자의 라이선스를 따릅니다.
+아이콘 이미지 출처: [Streamline Labs](https://lab.streamlineicons.com/)
