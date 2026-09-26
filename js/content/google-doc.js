@@ -2,7 +2,7 @@
 var readAloudDoc = (function() {
   if ($(".kix-canvas-tile-content > svg").length) return new SvgReadAloudDoc()
   if ($(".kix-paragraphrenderer").length) return new LegacyReadAloudDoc()
-  return new AddonReadAloudDoc()
+  return new ModelChunkReadAloudDoc()
 })();
 
 
@@ -22,202 +22,17 @@ async function altGetTexts() {
 
 
 
-function AddonReadAloudDoc() {
-  var addonFailed = false
-  var $popup = createPopup();
-  var cache = {expires: 0}
-  var shouldShowPopupOnError = new WeakMap()
-
-  addEventListener("message", function(event) {
-    if (event.data.type == "ra-advertise") {
-      cache = {
-        source: event.source,
-        expires: Date.now() + 1250
-      }
-    }
-  })
-
+//the document text from the page's own model data (DOCS_modelChunk): used when the canvas isn't
+//annotated (js/page/google-doc.js) and the old HTML renderer isn't there either
+function ModelChunkReadAloudDoc() {
   this.getCurrentIndex = function() {
-    return invoke({method: "ra-getCurrentIndex"})
-      .then(function(result) {
-        addonFailed = false
-        return result
-      },
-      function(err) {
-        addonFailed = true
-        return altGetTexts()
-          .then(() => 0)
-          .catch(function() {
-            if (shouldShowPopupOnError.has(err)) showPopup()
-            throw err
-          })
-      })
+    return altGetTexts()
+      .then(() => 0)
+      .catch(() => Promise.reject(new Error(JSON.stringify({code: "error_page_unreadable"}))))
   }
 
   this.getTexts = function(index) {
-    if (addonFailed) {
-      return index == 0 ? altGetTexts() : null
-    }
-    return invoke({method: "ra-getTexts", index: index})
-  }
-
-  function invoke(args) {
-    return Promise.resolve(cache.expires > Date.now() ? cache.source : getSource(7000))
-      .then(function(source) {
-        return new Promise(function(fulfill, reject) {
-          var req = Object.assign({}, args, {
-            id: String(Math.random())
-          })
-          source.postMessage(req, "*")
-          var onMessage = function(event) {
-            if (event.data.id == req.id) {
-              removeEventListener("message", onMessage)
-              if (event.data.error) reject(new Error(event.data.error))
-              else fulfill(event.data.value)
-            }
-          }
-          addEventListener("message", onMessage)
-        })
-      })
-  }
-
-  function getSource(waitDuration) {
-    console.log("Waiting for addon to advertise...")
-    return new Promise(function(fulfill, reject) {
-      var menu = $(".goog-menuitem-content").filter(function() {
-        return $(this).text().startsWith("Read Aloud TTS")
-      })
-      if (!menu.length) reject(new Error("'Read Aloud TTS' addon not found"))
-      simulateClick(menu.get(0))
-      setTimeout(fulfill, 250)
-    })
-    .then(function() {
-      var menu = $(".goog-menuitem-content").filter(function() {
-        return $(this).text().startsWith("Open sidebar")
-      })
-      if (!menu.length) throw new Error("'Open sidebar' menu not found")
-      simulateClick(menu.get(0))
-      menu.parent().parent().hide()
-      return waitForSource(waitDuration)
-    })
-    .catch(function(err) {
-      shouldShowPopupOnError.set(err, true)
-      throw err
-    })
-  }
-
-  function waitForSource(waitDuration) {
-    return new Promise(function(fulfill, reject) {
-      var timeout = setTimeout(function() {
-        removeEventListener("message", onMessage)
-        reject(new Error("Timeout waiting for response from addon"))
-      }, waitDuration)
-      var onMessage = function(event) {
-        if (event.data.type == "ra-advertise") {
-          clearTimeout(timeout)
-          removeEventListener("message", onMessage)
-          fulfill(event.source)
-        }
-      }
-      addEventListener("message", onMessage)
-    })
-  }
-
-  function showPopup() {
-    $popup.show();
-    $(document.body).one("click", function() {
-      $popup.hide();
-    })
-  }
-
-  function createPopup() {
-    if ($("#docs-extensions-menu").length) return createAddonInstructionPopup();
-    else return createSaveInstructionPopup();
-  }
-
-  function createAddonInstructionPopup() {
-    var $anchor = $("#docs-extensions-menu")
-    var anchorOffset = $anchor.offset()
-    var anchorDimension = {
-      width: $anchor.outerWidth(),
-      height: $anchor.outerHeight()
-    }
-    var $popup = $("<div>")
-      .appendTo(document.body)
-      .data("message", "You need to install the Read Aloud Google Workspace add-on to read aloud this document.")
-      .css({
-        position: "absolute",
-        left: anchorOffset.left + anchorDimension.width/2 - 160,
-        top: anchorOffset.top + anchorDimension.height,
-        width: 320,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        zIndex: 999000,
-        fontSize: "larger",
-      })
-    var $arrow = $("<div>")
-      .appendTo($popup)
-      .css({
-        width: 0,
-        height: 0,
-        borderLeft: ".5em solid transparent",
-        borderRight: ".5em solid transparent",
-        borderBottom: ".5em solid #333",
-      })
-    var $text = $("<div>")
-      .appendTo($popup)
-      .html("Please use this menu to find and install the Read Aloud Google Workspace add-on.  For instructions, see <a style='color:yellow' target='_blank' href='https://blog.readaloud.app/2021/09/google-docs-update.html'>this post</a>.")
-      .css({
-        backgroundColor: "#333",
-        color: "#fff",
-        padding: "1em",
-        borderRadius: ".5em",
-      })
-    return $popup.hide();
-  }
-
-  function createSaveInstructionPopup() {
-    var $anchor = $("#docs-file-menu")
-    var anchorOffset = $anchor.offset()
-    var anchorDimension = {
-      width: $anchor.outerWidth(),
-      height: $anchor.outerHeight()
-    }
-    var $popup = $("<div>")
-      .appendTo(document.body)
-      .data("message", "You need to use the Read Aloud Google Workspace add-on to read aloud this document.")
-      .css({
-        position: "absolute",
-        left: anchorOffset.left + anchorDimension.width/2 - 300,
-        top: anchorOffset.top + anchorDimension.height,
-        width: 600,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        zIndex: 999000,
-        fontSize: "larger",
-      })
-    var $arrow = $("<div>")
-      .appendTo($popup)
-      .css({
-        width: 0,
-        height: 0,
-        borderLeft: ".5em solid transparent",
-        borderRight: ".5em solid transparent",
-        borderBottom: ".5em solid #333",
-      })
-    var $text = $("<div>")
-      .appendTo($popup)
-      .html("The Add-ons menu is available only in Edit mode, you are currently in Read-only mode.<br><br>Please click 'File' - 'Make a copy' to open a copy of this document in Edit mode.")
-      .css({
-        marginLeft: 10 - Math.min(0, anchorOffset.left + anchorDimension.width/2 - 300),
-        backgroundColor: "#333",
-        color: "#fff",
-        padding: "1em",
-        borderRadius: ".5em",
-      })
-    return $popup.hide();
+    return index == 0 ? altGetTexts() : null
   }
 }
 

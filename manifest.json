@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
 
-  "name": "Read Aloud HRG: A Text to Speech Voice Reader",
-  "short_name": "Read Aloud HRG",
+  "name": "Blueming Web Read Aloud",
+  "short_name": "Blueming Web Read Aloud",
   "description": "__MSG_extension_description__",
   "version": "2.20.0",
   "default_locale": "en",
@@ -17,7 +17,6 @@
   "permissions": [
     "activeTab",
     "contextMenus",
-    "identity",
     "offscreen",
     "scripting",
     "storage",

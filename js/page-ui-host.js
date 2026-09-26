@@ -49,7 +49,7 @@ const pageUiHost = immediate(() => {
       subs: [],
       state: "LOADING",
       //whether the whole text is known up front (total time); unknown until the first page is read
-      singlePage: ui.pdfViewer ? false : ui.selection ? true : null,
+      singlePage: ui.selection ? true : null,
       canMute: false,
       timing: makePlaybackTiming(),
       segTexts: null,

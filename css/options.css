@@ -314,11 +314,6 @@ input[type=checkbox] + label {
   touch-action: none;
 }
 
-#account-info {
-  display: none;
-  font-size: smaller;
-}
-
 #advanced-options {
   min-width: 500px;
   margin-top: 1.5rem;

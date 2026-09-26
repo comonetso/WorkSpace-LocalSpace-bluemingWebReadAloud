@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Read Aloud: Texto A Voz"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "Read Aloud"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "Lea en voz alta el artículo actual con un solo clic."
@@ -84,7 +84,7 @@
     "message": "Cerrar sesión"
   },
   "player_tab_explanation": {
-    "message": "Leer en voz alta utiliza esta pestaña para la reproducción de audio. Esta pestaña se cerrará automáticamente después de 5 minutos sin actividad."
+    "message": "Blueming Web Read Aloud utiliza esta pestaña para la reproducción de audio. Esta pestaña se cerrará automáticamente después de 5 minutos sin actividad."
   },
   "player_hidethistab_link": {
     "message": "Ocultar esta pestaña"
@@ -93,7 +93,7 @@
     "message": "¿Ocultar esta pestaña?"
   },
   "player_hidethistab_dialog_body": {
-    "message": "Si oculta esta pestaña, Leer en voz alta reproducirá audio dentro de la página web actual. Esto significa que navegar fuera de la página hará que el discurso se detenga. (Esta configuración se puede revertir desde la página Opciones de extensión)"
+    "message": "Si oculta esta pestaña, Blueming Web Read Aloud reproducirá audio dentro de la página web actual. Esto significa que navegar fuera de la página hará que el discurso se detenga. (Esta configuración se puede revertir desde la página Opciones de extensión)"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "Esconder"
@@ -105,7 +105,7 @@
     "message": "Permiso solicitado"
   },
   "player_permission_dialog_body": {
-    "message": "¿Permitir lectura en voz alta para reproducir audio?"
+    "message": "¿Permitir que Blueming Web Read Aloud reproduzca audio?"
   },
   "player_permission_dialog_ok_button": {
     "message": "Permitir"
@@ -129,10 +129,10 @@
     "message": "No puedo leer en voz alta este sitio web"
   },
   "error_file_access": {
-    "message": "Debe otorgar acceso de lectura en voz alta a las URL de los archivos en la extensión [configuración](open-extension-settings)"
+    "message": "Debe otorgar a Blueming Web Read Aloud acceso a las URL de los archivos en la extensión [configuración](open-extension-settings)"
   },
   "error_add_permissions": {
-    "message": "Debe conceder [permisos](request-permissions) adicionales para leer en voz alta para este sitio web"
+    "message": "Debe conceder a Blueming Web Read Aloud [permisos](request-permissions) adicionales para este sitio web"
   },
   "error_login_required": {
     "message": "Por favor [inicie sesión](sign-in) para utilizar las voces premium"
@@ -153,12 +153,12 @@
     "message": "Volver a la configuración"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloud le gustaría usar el Traductor de Google para síntesis de voz."
+    "message": "Blueming Web Read Aloud le gustaría usar el Traductor de Google para síntesis de voz."
   },
   "google_translate_allow_button": {
     "message": "Permitir"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloud está usando el Traductor de Google para síntesis de voz. Por favor, mantenga esta pestaña abierta."
+    "message": "Blueming Web Read Aloud está usando el Traductor de Google para síntesis de voz. Por favor, mantenga esta pestaña abierta."
   }
 }

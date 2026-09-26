@@ -68,9 +68,7 @@ var handlers = {
   forward: forward,
   rewind: rewind,
   seek: seek,
-  reportIssue: reportIssue,
   authWavenet: authWavenet,
-  managePiperVoices,
 }
 
 registerMessageListener("serviceWorker", handlers)
@@ -204,7 +202,6 @@ async function readSelectionInTab(tab, frameId, fallbackText) {
     sessionId,
     tabId: tab.id,
     selection: true,
-    pdfViewer: (tab.url || "").startsWith(brapi.runtime.getURL("pdf-viewer.html")),
     highlight: !!(captured && captured.mappable && captured.text == text),
     highlightFrameId: frameId || 0,
   } : null
@@ -320,7 +317,6 @@ async function playTab(tabId) {
     if (handler.getSourceUri) {
       const sourceUri = handler.getSourceUri(tab)
       await brapi.storage.local.set({"sourceUri": sourceUri})
-      if (sourceUri.startsWith("pdfviewer:")) ui = {sessionId: newPageUiSessionId(), tabId: tab.id, pdfViewer: true}
     }
     else {
       const frameId = handler.getFrameId && await getAllFrames(tab.id).then(frames => handler.getFrameId(frames))
@@ -406,11 +402,6 @@ async function showPageUi(ui) {
 
 async function showPageBar(ui) {
   try {
-    if (ui.pdfViewer) {
-      //the extension's own PDF viewer loads js/page-ui.js itself (scripting can't inject into extension pages)
-      await brapi.runtime.sendMessage({dest: "pdfViewer", method: "startPageUi", args: [ui.sessionId, ui.tabId]})
-      return
-    }
     const top = {tabId: ui.tabId, frameIds: [0]}
     await brapi.scripting.executeScript({target: top, files: ["js/page-ui.js"]})
     await brapi.scripting.executeScript({target: top, func: id => window.__readAloudHrgUi.startBar(id), args: [ui.sessionId]})
@@ -503,20 +494,6 @@ function handleHeadlessError(err) {
   //TODO: let user knows somehow
 }
 
-function reportIssue(url, comment) {
-  var manifest = brapi.runtime.getManifest();
-  return getSettings()
-    .then(function(settings) {
-      if (url) settings.url = url;
-      settings.version = manifest.version;
-      settings.userAgent = navigator.userAgent;
-      return ajaxPost(config.serviceUrl + "/read-aloud/report-issue", {
-        url: JSON.stringify(settings),
-        comment: comment
-      })
-    })
-}
-
 function authWavenet() {
   createTab("https://cloud.google.com/text-to-speech/#put-text-to-speech-into-action", true)
     .then(function(tab) {
@@ -577,25 +554,6 @@ function authWavenet() {
     })
 }
 
-async function openPdfViewer(tabId, pdfUrl) {
-  const perms = {
-    origins: ["http://*/", "https://*/"]
-  }
-  if (!await brapi.permissions.contains(perms)) {
-    throw new Error(JSON.stringify({code: "error_add_permissions", perms: perms}))
-  }
-  await setTabUrl(tabId, brapi.runtime.getURL("pdf-viewer.html?url=" + encodeURIComponent(pdfUrl)))
-  await new Promise(f => handlers.pdfViewerCheckIn = f)
-}
-
-async function managePiperVoices() {
-  const result = await sendToPlayer({method: "managePiperVoices"}).catch(err => false)
-  if (result != "OK") {
-    if (result == "POPOUT") await sendToPlayer({method: "close"})
-    await injectPlayer()
-    await sendToPlayer({method: "managePiperVoices"})
-  }
-}
 
 
 
@@ -638,11 +596,11 @@ async function injectContentScript(tab, frameId, extraScripts) {
 }
 
 //the player goes inside the page being read, out of sight, unless the tab was chosen in the options
-//(useEmbeddedPlayer false) or Piper voices need it; pages it can't go into get the tab
+//(useEmbeddedPlayer false); pages it can't go into get the tab
 async function injectPlayer(tab) {
-  const settings = await getSettings(["useEmbeddedPlayer", "piperVoices"])
+  const settings = await getSettings(["useEmbeddedPlayer"])
   const promise = new Promise(f => handlers.playerCheckIn = f)
-  if (tab && settings.useEmbeddedPlayer !== false && canUseEmbeddedPlayer() && (settings.piperVoices || []).length == 0) {
+  if (tab && settings.useEmbeddedPlayer !== false && canUseEmbeddedPlayer()) {
     try {
       if (tab.incognito) {
         //https://developer.chrome.com/docs/extensions/mv3/manifest/incognito/

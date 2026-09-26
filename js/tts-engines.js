@@ -1,21 +1,17 @@
 var browserTtsEngine = brapi.tts ? new BrowserTtsEngine() : (typeof speechSynthesis != 'undefined' ? new WebSpeechEngine() : new DummyTtsEngine());
-var premiumTtsEngine = new PremiumTtsEngine(config.serviceUrl);
 var googleTranslateTtsEngine = new GoogleTranslateTtsEngine();
 var amazonPollyTtsEngine = new AmazonPollyTtsEngine();
 var googleWavenetTtsEngine = new GoogleWavenetTtsEngine();
 var ibmWatsonTtsEngine = new IbmWatsonTtsEngine();
-var phoneTtsEngine = new PhoneTtsEngine();
 var openaiTtsEngine = new OpenaiTtsEngine();
 var naverClovaTtsEngine = new NaverClovaTtsEngine(); // 네이버 클로바 TTS 엔진 추가
 var azureTtsEngine = new AzureTtsEngine();
-const piperTtsEngine = new PiperTtsEngine()
 
 
 /*
 interface Options {
   voice: {
     voiceName: string
-    autoSelect?: boolean
   }
   lang: string
   rate?: number
@@ -68,7 +64,6 @@ function BrowserTtsEngine() {
       }
     }
     return voices
-      .filter(voice => !isPiperVoice(voice))
   }
 }
 
@@ -175,201 +170,6 @@ function TimeoutTtsEngine(baseEngine, startTimeout, endTimeout) {
     baseEngine.stop();
   }
   this.isSpeaking = baseEngine.isSpeaking;
-}
-
-
-function PremiumTtsEngine(serviceUrl) {
-  var readyPromise;
-  var prefetchAudio;
-  var nextStartTime = 0;
-  this.prepare = function(options) {
-    readyPromise = immediate(async () => {
-      const authToken = await getAuthToken()
-      if (isPremiumVoice(options.voice) && !options.voice.autoSelect) {
-        if (!authToken) throw new Error(JSON.stringify({code: "error_login_required"}));
-        const account = await getAccountInfo(authToken)
-        if (!account) throw new Error(JSON.stringify({code: "error_login_required"}));
-        if (!account.balance) throw new Error(JSON.stringify({code: "error_payment_required"}));
-      }
-      return {
-        authToken,
-        clientId: await getUniqueClientId(),
-        manifest: brapi.runtime.getManifest()
-      }
-    })
-  }
-  this.speak = function(utterance, options, playbackState$) {
-    const urlPromise = Promise.resolve()
-      .then(() => {
-        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
-        else return getAudioUrl(utterance, options)
-      })
-    return playAudio(urlPromise, {...options, startTime: nextStartTime}, playbackState$).pipe(
-      rxjs.tap(event => {
-        if (event.type == "end") nextStartTime = Date.now() + 650 / options.rate
-      })
-    )
-  }
-  this.prefetch = function(utterance, options) {
-    getAudioUrl(utterance, options)
-      .then(url => prefetchAudio = [utterance, options, url])
-      .catch(console.error)
-  }
-  this.getVoices = async function() {
-    const premiumVoiceList = await getSetting("premiumVoiceList")
-    if (!premiumVoiceList || premiumVoiceList.expire < Date.now()) refreshVoiceList()
-    return (premiumVoiceList ? premiumVoiceList.items : voices)
-      .concat(
-        {voiceName: "ReadAloud Generic Voice", autoSelect: true},
-      )
-  }
-  async function refreshVoiceList() {
-    try {
-      const res = await fetch(serviceUrl + "/read-aloud/list-voices/premium")
-      if (!res.ok) throw new Error("Server return " + res.status)
-      const items = await res.json()
-      await updateSetting("premiumVoiceList", {items, expire: Date.now() + 24*3600*1000})
-    } catch (err) {
-      console.error("Error refreshing premium voice list", err)
-    }
-  }
-  async function getAudioUrl(utterance, {lang, voice}) {
-    const {authToken, clientId, manifest} = await readyPromise
-    const url = serviceUrl + "/read-aloud/speak/" + lang + "/" + encodeURIComponent(voice.voiceName) + "?c=" + encodeURIComponent(clientId) + "&t=" + encodeURIComponent(authToken) + (voice.autoSelect ? '&a=1' : '') + "&v=" + manifest.version + "&q=" + encodeURIComponent(utterance)
-    const res = await fetch(url)
-    if (!res.ok) {
-      const msg = await res.text().catch(err => "")
-      throw new Error(msg || (res.status + " " + res.statusText))
-    }
-    const blob = await res.blob()
-    return URL.createObjectURL(blob)
-  }
-  var voices = [
-      {"voice_name": "Amazon Australian English (Nicole)", "lang": "en-AU", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Australian English (Russell)", "lang": "en-AU", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Brazilian Portuguese (Ricardo)", "lang": "pt-BR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Brazilian Portuguese (Vitoria)", "lang": "pt-BR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon British English (Amy)", "lang": "en-GB", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon British English (Brian)", "lang": "en-GB", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon British English (Emma)", "lang": "en-GB", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Canadian French (Chantal)", "lang": "fr-CA", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Castilian Spanish (Conchita)", "lang": "es-ES", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Castilian Spanish (Enrique)", "lang": "es-ES", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Danish (Mads)", "lang": "da-DK", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Danish (Naja)", "lang": "da-DK", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Dutch (Lotte)", "lang": "nl-NL", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Dutch (Ruben)", "lang": "nl-NL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon French (Celine)", "lang": "fr-FR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon French (Mathieu)", "lang": "fr-FR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon German (Hans)", "lang": "de-DE", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon German (Marlene)", "lang": "de-DE", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Icelandic (Dora)", "lang": "is-IS", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Icelandic (Karl)", "lang": "is-IS", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Indian English (Raveena)", "lang": "en-IN", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Italian (Carla)", "lang": "it-IT", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Italian (Giorgio)", "lang": "it-IT", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Norwegian (Liv)", "lang": "nb-NO", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Polish (Ewa)", "lang": "pl-PL", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Polish (Jacek)", "lang": "pl-PL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Polish (Jan)", "lang": "pl-PL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Polish (Maja)", "lang": "pl-PL", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Portuguese (Cristiano)", "lang": "pt-PT", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Portuguese (Ines)", "lang": "pt-PT", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Romanian (Carmen)", "lang": "ro-RO", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Russian (Maxim)", "lang": "ru-RU", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Russian (Tatyana)", "lang": "ru-RU", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Swedish (Astrid)", "lang": "sv-SE", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Turkish (Filiz)", "lang": "tr-TR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Ivy)", "lang": "en-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Joey)", "lang": "en-US", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Justin)", "lang": "en-US", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Kendra)", "lang": "en-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Kimberly)", "lang": "en-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US English (Salli)", "lang": "en-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US Spanish (Miguel)", "lang": "es-US", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon US Spanish (Penelope)", "lang": "es-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Welsh (Gwyneth)", "lang": "cy-GB", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Amazon Welsh English (Geraint)", "lang": "en-GB-WLS", "gender": "male", "event_types": ["start", "end", "error"]},
-
-      {"voice_name": "Microsoft Australian English (Catherine)", "lang": "en-AU", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Australian English (James)", "lang": "en-AU", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Austrian German (Michael)", "lang": "de-AT", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Belgian Dutch (Bart)", "lang": "nl-BE", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Brazilian Portuguese (Daniel)", "lang": "pt-BR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Brazilian Portuguese (Maria)", "lang": "pt-BR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft British English (George)", "lang": "en-GB", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft British English (Hazel)", "lang": "en-GB", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft British English (Susan)", "lang": "en-GB", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Bulgarian (Ivan)", "lang": "bg-BG", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Canadian English (Linda)", "lang": "en-CA", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Canadian English (Richard)", "lang": "en-CA", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Canadian French (Caroline)", "lang": "fr-CA", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Canadian French (Claude)", "lang": "fr-CA", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Canadian French (Nathalie)", "lang": "fr-CA", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Catalan (Herena)", "lang": "ca-ES", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Chinese (Huihui)", "lang": "zh-CN", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Chinese (Kangkang)", "lang": "zh-CN", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Chinese (Yaoyao)", "lang": "zh-CN", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft ChineseHK (Danny)", "lang": "zh-HK", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft ChineseHK (Tracy)", "lang": "zh-HK", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Croatian (Matej)", "lang": "hr-HR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Czech (Jakub)", "lang": "cs-CZ", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Danish (Helle)", "lang": "da-DK", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Dutch (Frank)", "lang": "nl-NL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Egyptian Arabic (Hoda)", "lang": "ar-EG", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Finnish (Heidi)", "lang": "fi-FI", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft French (Hortense)", "lang": "fr-FR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft French (Julie)", "lang": "fr-FR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft French (Paul)", "lang": "fr-FR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft German (Hedda)", "lang": "de-DE", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft German (Katja)", "lang": "de-DE", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft German (Stefan)", "lang": "de-DE", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Greek (Stefanos)", "lang": "el-GR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Hebrew (Asaf)", "lang": "he-IL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Hindi (Hemant)", "lang": "hi-IN", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Hindi (Kalpana)", "lang": "hi-IN", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Hungarian (Szabolcs)", "lang": "hu-HU", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Indian English (Heera)", "lang": "en-IN", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Indian English (Ravi)", "lang": "en-IN", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Indonesian (Andika)", "lang": "id-ID", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Irish English (Sean)", "lang": "en-IE", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Italian (Cosimo)", "lang": "it-IT", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Italian (Elsa)", "lang": "it-IT", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Japanese (Ayumi)", "lang": "ja-JP", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Japanese (Haruka)", "lang": "ja-JP", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Japanese (Ichiro)", "lang": "ja-JP", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Japanese (Sayaka)", "lang": "ja-JP", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Korean (Heami)", "lang": "ko-KR", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Malay (Rizwan)", "lang": "ms-MY", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Mexican Spanish (Raul)", "lang": "es-MX", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Mexican Spanish (Sabina)", "lang": "es-MX", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Norwegian (Jon)", "lang": "nb-NO", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Polish (Adam)", "lang": "pl-PL", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Polish (Paulina)", "lang": "pl-PL", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Portuguese (Helia)", "lang": "pt-PT", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Romanian (Andrei)", "lang": "ro-RO", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Russian (Irina)", "lang": "ru-RU", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Russian (Pavel)", "lang": "ru-RU", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Saudi Arabic (Naayf)", "lang": "ar-SA", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Slovak (Filip)", "lang": "sk-SK", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Slovenian (Lado)", "lang": "sl-SI", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Spanish (Helena)", "lang": "es-ES", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Spanish (Laura)", "lang": "es-ES", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Spanish (Pablo)", "lang": "es-ES", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Swedish (Bengt)", "lang": "sv-SE", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Swiss French (Guillaume)", "lang": "fr-CH", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Swiss German (Karsten)", "lang": "de-CH", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Tamil (Valluvar)", "lang": "ta-IN", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Thai (Pattara)", "lang": "th-TH", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Turkish (Tolga)", "lang": "tr-TR", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft US English (David)", "lang": "en-US", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft US English (Mark)", "lang": "en-US", "gender": "male", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft US English (Zira)", "lang": "en-US", "gender": "female", "event_types": ["start", "end", "error"]},
-      {"voice_name": "Microsoft Vietnamese (An)", "lang": "vi-VI", "gender": "male", "event_types": ["start", "end", "error"]},
-    ]
-    .map(function(item) {
-      return {voiceName: item.voice_name, lang: item.lang};
-    })
 }
 
 
@@ -614,9 +414,10 @@ function GoogleWavenetTtsEngine() {
   this.getVoices = function() {
     return getSettings(["wavenetVoices", "gcpCreds"])
       .then(function(items) {
-        if (!items.wavenetVoices || Date.now()-items.wavenetVoices[0].ts > 24*3600*1000) updateVoices();
-        var listvoices = items.wavenetVoices || voices;
         var creds = items.gcpCreds;
+        //the list comes from Google with the API key; without one, the stored list (or the one below) is used
+        if (creds && creds.apiKey && (!items.wavenetVoices || Date.now()-items.wavenetVoices[0].ts > 24*3600*1000)) updateVoices(creds.apiKey);
+        var listvoices = items.wavenetVoices || voices;
         return listvoices.filter(
           function(voice) {
             // include all voices or exclude only studio voices.
@@ -632,13 +433,70 @@ function GoogleWavenetTtsEngine() {
         })
       })
   }
-  function updateVoices() {
-    ajaxGet(config.serviceUrl + "/read-aloud/list-voices/google")
-      .then(JSON.parse)
-      .then(function(list) {
+  //Google's voice list (voices.list, with the API key synthesis uses), under the names these voices have always had here:
+  //saved settings (voiceName, preferredVoices) hold them, so they must come out the same.
+  //"ko-KR-Chirp3-HD-Zephyr" -> "GoogleChirp3-HD Korean (Zephyr)", "ko-KR-Standard-A" (female) -> "GoogleStandard Korean (Anna)"
+  function updateVoices(apiKey) {
+    ajaxGet({url: "https://texttospeech.googleapis.com/v1/voices?key=" + encodeURIComponent(apiKey), responseType: "json"})
+      .then(function(data) {
+        var list = makeVoiceList(data.voices || []);
+        if (!list.length) throw new Error("No voices in Google's voice list");
         list[0].ts = Date.now();
-        updateSettings({wavenetVoices: list});
+        return updateSettings({wavenetVoices: list});
       })
+      .catch(console.error)
+  }
+  //by language, each in Google's order: where two languages give the same voice name (es-ES/es-US, nl-BE/nl-NL),
+  //the first one is the voice found by that name (findVoiceByName)
+  function makeVoiceList(items) {
+    return items
+      .map(function(item) {
+        var matches = /^([a-z]{2,3}-[A-Z]{2})-(\S+)-(\w+)$/.exec(item.name);
+        if (!matches) return null;
+        var lang = matches[1], voiceType = matches[2], speakerId = matches[3];
+        //getAudioUrl() takes the speaker back from the name: all of it for Chirp 3 HD, the first letter for the others
+        if (voiceType != "Chirp3-HD" && speakerId.length != 1) return null;
+        var gender = String(item.ssmlGender || "").toLowerCase();
+        var speaker = voiceType == "Chirp3-HD" ? speakerId : (speakerNames[speakerId] || {})[gender] || speakerId;
+        var langName = langNames[lang] || langNames[lang.split("-")[0]] || lang;
+        var voice = {voiceName: "Google" + voiceType + " " + langName + " (" + speaker + ")", lang: lang, gender: gender};
+        return isGoogleWavenet(voice) ? voice : null;
+      })
+      .filter(Boolean)
+      .sort(function(a, b) {return a.lang < b.lang ? -1 : a.lang > b.lang ? 1 : 0})
+  }
+  //the names voice names have used for Google's one-letter speakers, by letter and gender
+  var speakerNames = {
+    A: {female: "Anna", male: "Adam"},
+    B: {female: "Bianca", male: "Benjamin"},
+    C: {female: "Carol", male: "Christopher"},
+    D: {female: "Diane", male: "Daniel"},
+    E: {female: "Elise", male: "Ethan"},
+    F: {female: "Francesca", male: "Fernando"},
+    G: {female: "Grace", male: "George"},
+    H: {female: "Helena", male: "Harvey"},
+    I: {female: "Isabel", male: "Ian"},
+    J: {male: "James"},
+    K: {female: "Kim", male: "Kyle"},
+    L: {female: "Liz", male: "Louis"},
+    M: {male: "Mark"},
+    N: {female: "Natalie", male: "Nick"},
+    O: {female: "Olivia", male: "Oliver"},
+    Q: {male: "Quinn"},
+  }
+  //the language names voice names have used, by language (or language-region where it differs); others show the code
+  var langNames = {
+    "af": "Afrikaans", "am": "Amharic", "ar": "Arabic", "bg": "Bulgarian", "bn": "Bengali", "ca": "Catalan; Valencian",
+    "cmn-CN": "Mandarin", "cs": "Czech", "da": "Danish", "de": "German", "el": "Greek, Modern",
+    "en-AU": "Australian English", "en-GB": "British English", "en-IN": "Indian English", "en-US": "US English",
+    "es": "Spanish; Castilian", "et": "Estonian", "eu": "Basque", "fi": "Finnish", "fil": "Filipino",
+    "fr": "French", "fr-CA": "Canadian French", "gl": "Galician", "gu": "Gujarati", "he": "Hebrew (modern)", "hi": "Hindi",
+    "hr": "Croatian", "hu": "Hungarian", "id": "Indonesian", "is": "Icelandic", "it": "Italian", "ja": "Japanese",
+    "kn": "Kannada", "ko": "Korean", "lt": "Lithuanian", "lv": "Latvian", "ml": "Malayalam", "mr": "Marathi (Marāṭhī)",
+    "ms": "Malay", "nb": "Norwegian Bokmål", "nl": "Dutch", "pa": "Panjabi, Punjabi", "pl": "Polish",
+    "pt": "Portuguese", "pt-BR": "Brazilian Portuguese", "ro": "Romanian, Moldavian, Moldovan", "ru": "Russian",
+    "sk": "Slovak", "sl": "Slovene", "sr": "Serbian", "sv": "Swedish", "sw": "Swahili", "ta": "Tamil", "te": "Telugu",
+    "th": "Thai", "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese",
   }
   function getAudioUrl(text, voice, pitch) {
     assert(text && voice);
@@ -863,123 +721,6 @@ function IbmWatsonTtsEngine() {
           }
         })
       })
-  }
-}
-
-
-function PhoneTtsEngine() {
-  var isSpeaking = false
-  var conn
-  const pendingRequests = new Map()
-  const getPairingCode = lazy(() => 100000 + Math.floor(Math.random() * 900000))
-  const getPeer = lazy(async () => {
-    const peer = new Peer("readaloud-" + getPairingCode(), {debug: 2})
-    await new Promise((f,r) => peer.once("open", f).once("error", r))
-    peer.on("connection", newConn => {
-      const makeError = reason => new Error(JSON.stringify({code: "error_phone_disconnected", reason}))
-      newConn.readyPromise = new Promise((fulfill, reject) => {
-        newConn.once("open", fulfill)
-          .once("error", err => reject(makeError(err.message || err)))
-      })
-      newConn.once("close", () => newConn.readyPromise = Promise.reject(makeError("Connection lost")))
-      newConn.on("error", console.error)
-      newConn.on("data", res => {
-        const pending = pendingRequests.get(res.id)
-        if (pending) {
-          if (res.error) pending.reject(new Error(res.error))
-          else pending.fulfill(res.value)
-        }
-        else {
-          console.warn("Response received but no pending request", res)
-        }
-      })
-      newConn.peerConnection.addEventListener("connectionstatechange", () => {
-        //https://bugs.chromium.org/p/chromium/issues/detail?id=982793#c15
-        if (newConn.peerConnection.connectionState == "failed") newConn.close()
-      })
-      if (conn) conn.close()
-      conn = newConn
-    })
-    window.addEventListener("beforeunload", () => peer.destroy())
-    return peer
-  })
-  this.startPairing = async function() {
-    if (conn) {
-      conn.close()
-      conn = null
-    }
-    const peer = await getPeer()
-    if (peer.disconnected) peer.reconnect()
-    return getPairingCode()
-  }
-  this.isPaired = async function() {
-    return conn != null
-  }
-  async function sendRequest(req, timeout) {
-    req.id = String(Math.random())
-    await conn.readyPromise
-    conn.send(req)
-    const responsePromise = new Promise((fulfill, reject) => pendingRequests.set(req.id, {fulfill, reject}))
-    try {
-      return await promiseTimeout(timeout || 5000, "Request timed out", responsePromise)
-    }
-    catch(err) {
-      if (err.message == "Request timed out") {
-        console.warn("Request timed out, assuming phone connection lost")
-        conn.close()
-      }
-      throw err
-    }
-    finally {
-      pendingRequests.delete(req.id)
-    }
-  }
-  this.speak = function(text, options, onEvent) {
-    if (!conn) {
-      onEvent({type: "error", error: new Error(JSON.stringify({code: "error_phone_not_connected"}))})
-      return
-    }
-    sendRequest({
-        method: "speak",
-        text,
-        options: {
-          lang: options.lang,
-          rate: options.rate,
-          pitch: options.pitch,
-          volume: options.volume
-        }
-      })
-      .then(({speechId}) => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true
-        sendRequest({method: "waitFinish", speechId}, 3*60*1000)
-          .then(() => onEvent({type: "end", charIndex: text.length}),
-            err => {
-              if (err.message != "interrupted") onEvent({type: "error", error: err})
-            })
-          .finally(() => isSpeaking = false)
-      })
-      .catch(err => {
-        if (err.message != "canceled") onEvent({type: "error", error: err})
-      })
-  }
-  this.stop = function() {
-    if (!conn) return;
-    sendRequest({method: "stop"}).catch(console.error)
-  }
-  this.pause = function() {
-    sendRequest({method: "pause"}).catch(console.error)
-  }
-  this.resume = function() {
-    sendRequest({method: "resume"}).catch(console.error)
-  }
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking)
-  }
-  this.getVoices = function() {
-    return [
-      {voiceName: "Use My Phone", remote: false, isUseMyPhone: true},
-    ]
   }
 }
 
@@ -1331,90 +1072,5 @@ function AzureTtsEngine() {
     if (!res.ok) throw new Error("Server return " + res.status)
     const blob = await res.blob()
     return URL.createObjectURL(blob)
-  }
-}
-
-
-function PiperTtsEngine() {
-  let control = null
-  let isSpeaking = false
-  this.speak = function(utterance, options, onEvent) {
-    const piperPromise = rxjs.firstValueFrom(piperObservable)
-    control = new rxjs.Subject()
-    control
-      .pipe(
-        rxjs.startWith("speak"),
-        rxjs.concatMap(async cmd => {
-          const piper = await piperPromise
-          switch (typeof cmd == "string" ? cmd : cmd.type) {
-            case "speak":
-              return piper.sendRequest("speak", {
-                utterance,
-                voiceName: options.voice.voiceName,
-                pitch: options.pitch,
-                rate: options.rate,
-                volume: options.volume,
-                externalPlayback: options.rate && options.rate != 1,
-              })
-            case "pause":
-              return piper.sendRequest("pause")
-            case "resume":
-              return piper.sendRequest("resume")
-            case "stop":
-              return piper.sendRequest("stop")
-                .then(() => Promise.reject({name: "interrupted", message: "Playback interrupted"}))
-            case "forward":
-              return piper.sendRequest("forward")
-            case "rewind":
-              return piper.sendRequest("rewind")
-            case "seek":
-              return piper.sendRequest("seek", {index: cmd.index})
-          }
-        }),
-        rxjs.ignoreElements(),
-        rxjs.mergeWith(piperCallbacks),
-        rxjs.map(event => {
-          if (event.type == "error") throw event.error
-          return event
-        }),
-        rxjs.takeWhile(event => event.type != "end")
-      )
-      .subscribe({
-        next(event) {
-          if (event.type == "start") isSpeaking = true
-          onEvent(event)
-        },
-        complete() {
-          onEvent({type: "end"})
-        },
-        error(err) {
-          if (err.name != "interrupted") onEvent({type: "error", error: err})
-        }
-      })
-      .add(() => {
-        isSpeaking = false
-        control = null
-      })
-  }
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking)
-  }
-  this.pause = function() {
-    control?.next("pause")
-  }
-  this.resume = function() {
-    control?.next("resume")
-  }
-  this.stop = function() {
-    control?.next("stop")
-  }
-  this.forward = function() {
-    control?.next("forward")
-  }
-  this.rewind = function() {
-    control?.next("rewind")
-  }
-  this.seek = function(index) {
-    control?.next({type: "seek", index})
   }
 }

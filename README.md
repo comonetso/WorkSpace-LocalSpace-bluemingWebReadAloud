@@ -1,165 +1,74 @@
-# Read Aloud HRG: A Text to Speech Voice Reader
+# Blueming Web Read Aloud
 
-이 프로젝트는 Read Aloud 확장 프로그램을 기반으로 네이버 클로바 TTS API를 지원하도록 수정한 버전입니다.
+웹페이지나 선택한 글을 소리 내어 읽어 주는 Chrome 확장 프로그램(Manifest V3)입니다.
+한국어 읽기에 맞춰 다듬었고, 네이버 클로바 음성을 쓸 수 있습니다.
 
-## 개발자 모드에서 확장 프로그램 로드하기
+> 원본 [ken107/read-aloud](https://github.com/ken107/read-aloud)(MIT)을 포크해 시작했습니다.
 
-이 확장 프로그램을 Chrome에서 개발자 모드로 테스트하려면:
+## 하는 일
 
-1. Chrome 브라우저를 엽니다.
-2. 주소창에 `chrome://extensions/`를 입력하고 엔터를 누릅니다.
-3. 오른쪽 상단에 "개발자 모드" 토글 스위치를 활성화합니다.
-4. "압축해제된 확장 프로그램을 로드합니다" 버튼을 클릭합니다.
-5. 파일 선택 대화 상자에서 이 프로젝트의 디렉토리를 선택합니다.
-6. 확인 버튼을 클릭하면 확장 프로그램이 Chrome에 로드됩니다.
+- **페이지 읽기** — 확장 아이콘을 누르면 지금 페이지를 읽습니다. 읽고 있는 탭에서 다시 누르면 일시정지·이어 읽기, 다른 탭에서 누르면 그 탭을 새로 읽습니다. 옵션에서 아이콘을 누를 때 팝업이 뜨게 바꿀 수 있습니다.
+- **본문만 골라 읽기** — 페이지 전체를 읽을 때 [Mozilla Readability](https://github.com/mozilla/readability)로 본문만 골라 읽습니다(댓글·관련 기사 등 제외). 본문을 찾지 못하면 페이지 글을 기존 방식으로 읽습니다.
+- **드래그 선택 읽기** — 글을 드래그해 선택하면 옆에 작은 빨간 점이 뜨고, 누르면 선택한 글을 읽습니다. 오른쪽 클릭 메뉴로도 읽을 수 있습니다. 빨간 점은 옵션에서 끌 수 있습니다.
+- **페이지 재생 바** — 읽는 동안 페이지 아래쪽에 재생 바가 뜹니다. 지난 시간·총 시간(추정), 이전·다음 단락, 일시정지·이어 읽기, 음소거, 닫기(정지)가 있고, 설정 버튼에서 속도·피치·볼륨을 바꾸면 읽는 중에 바로 적용됩니다.
+- **원문 형광펜** — 지금 읽는 부분을 원문 위에 형광펜으로 표시하고, 읽는 곳이 보이게 따라 스크롤합니다. 단어 위치를 알려 주는 음성(브라우저 내장 음성 등)은 단어 단위, 나머지는 지금 읽는 조각(줄) 단위로 칠합니다.
+- **줄 단위 읽기** — 줄마다 따로 합성해 줄 사이에서 쉬어 읽습니다. 아주 짧은 줄은 아래 줄과 합쳐 읽습니다.
+- **영어 대문자 단어·파일명을 사람처럼 읽기** (한국어·영어 음성)
+  - 전부 대문자인 영어 단어를 철자로 읽지 않고 단어로 읽습니다. 예: `README` → read me, `CHANGELOG` → change log
+  - 파일명·경로·코드 이름은 조각별로 읽고 사이 기호를 말합니다. 예: `page-ui-host.js` → page 대시 UI 대시 host 쩜 JS
+  - 한국어 음성에서는 숫자의 천 단위 쉼표를 빼고 읽습니다. 예: `2,200` → 2200
+- **재생 탭 없이 읽기** — 읽기를 맡는 재생기가 읽는 페이지 안에 보이지 않게 들어가, 따로 재생 탭이 생기지 않습니다. 옵션에서 탭 방식으로 바꿀 수 있고, 페이지에 넣을 수 없는 곳(브라우저 내부 페이지 등)에서는 탭으로 엽니다.
 
-## 네이버 클로바 TTS API 설정하기
+## 음성
 
-1. 확장 프로그램 아이콘을 클릭하고 설정 버튼을 누릅니다.
-2. "커스텀 목소리 활성화" 링크를 클릭합니다.
-3. "네이버 클로바" 섹션에서 Client ID와 Client Secret을 입력합니다.
-4. "저장" 버튼을 클릭합니다.
+| 음성 | 필요한 것 |
+|---|---|
+| 네이버 클로바 | 네이버 클라우드 플랫폼 CLOVA Voice 의 Client ID·Client Secret |
+| 구글 Wavenet·Chirp 등 (Google Cloud Text-to-Speech) | Google Cloud API 키 |
+| 구글 번역 음성 | 없음 |
+| 브라우저 내장 음성 | 없음 |
+| Amazon Polly | AWS 액세스 키 |
+| Microsoft Azure | Azure Speech 지역·키 |
+| OpenAI (또는 OpenAI 호환 Speech 엔드포인트) | API 키 |
+| IBM Watson | API 키·URL |
 
-## 클로바 API 인증 정보 획득하기
+키가 필요한 음성은 모두 사용자 본인의 계정 키로 각 서비스를 직접 호출합니다.
 
-네이버 클로바 API 인증 정보를 얻으려면:
+## 설치
 
-1. 네이버 클라우드 플랫폼(https://www.ncloud.com/)에 가입합니다.
-2. CLOVA Voice 서비스를 활성화합니다.
-3. API 게이트웨이를 설정하고 Client ID와 Client Secret을 발급받습니다.
+빌드 과정 없이 폴더를 그대로 불러옵니다.
 
-## 지원되는 네이버 클로바 음성
+1. 이 저장소를 내려받습니다.
+   ```bash
+   git clone https://github.com/comonetso/WorkSpace-LocalSpace-bluemingWebReadAloud.git
+   ```
+2. Chrome 주소창에 `chrome://extensions` 를 엽니다.
+3. 오른쪽 위 **개발자 모드**를 켭니다.
+4. **압축해제된 확장 프로그램을 로드합니다**를 눌러 내려받은 폴더를 고릅니다.
 
-이 확장 프로그램은 다음과 같은 네이버 클로바 음성을 지원합니다:
+## 네이버 클로바 키 넣기
 
-- Clova 미진 (여성, 한국어)
-- Clova 지민 (여성, 한국어)
-- Clova 준영 (남성, 한국어)
-- Clova 민상 (남성, 한국어)
-- Clova 벨라 (여성, 영어)
-- Clova 매트 (남성, 영어)
-- Clova 유진 (여성, 일본어)
-- Clova 신지 (남성, 일본어)
-- Clova 메이메이 (여성, 중국어)
-- Clova 시엔시엔 (남성, 중국어)
+1. 확장 아이콘을 오른쪽 클릭해 **옵션**을 엽니다.
+2. 음성 목록에서 **Enable Custom Voices** 항목을 고르면 음성 설정(custom-voices) 화면이 열립니다.
+3. **Naver Clova** 칸에 Client ID·Client Secret 을 넣고 저장합니다. API URL 은 기본값(`https://naveropenapi.apigw.ntruss.com/tts-premium/v1`)을 그대로 두면 됩니다.
+4. 옵션 화면의 음성 목록에서 `Clova` 로 시작하는 음성을 고릅니다.
+
+클로바 키는 [네이버 클라우드 플랫폼](https://www.ncloud.com/)에서 CLOVA Voice 서비스를 신청하고 애플리케이션을 등록하면 받을 수 있습니다.
+다른 음성(구글 Cloud·AWS·Azure·OpenAI·IBM)의 키도 같은 음성 설정 화면에서 넣습니다.
 
 ## 단축키
 
-```
-ALT + P           : 재생/일시정지
-ALT + O           : 정지
-ALT + 쉼표(,)      : 되감기
-ALT + 마침표(.)     : 앞으로 감기
-```
+| 키 | 동작 |
+|---|---|
+| `Alt+P` | 읽기·일시정지 |
+| `Alt+O` | 정지 |
+| `Alt+,` | 되감기 |
+| `Alt+.` | 앞으로 감기 |
 
-<div align="center">
-	<img src="img/icon.png" width="128" height="128">
-	<br>
-	<img src="docs/images/logo-text-trans.png" width="391" height="66">
-	<br>
-	A <b>Text to Speech Voice Reader</b> extension for your browser!
-</div>
+단축키는 `chrome://extensions/shortcuts` 에서 바꿀 수 있습니다.
 
-<div align="center">
-	<a href="https://chrome.google.com/webstore/detail/read-aloud-a-text-to-spee/hdhinadidafjejdhmfkjgnolgimiaplp">Chrome Web Store</a> | <a href="https://addons.mozilla.org/en-US/firefox/addon/read-aloud/">Firefox Addon</a> | <a href="https://blog.readaloud.app/">Blog</a> | <a href="https://readaloud.app/">Website</a>
-</div>
+## 라이선스
 
-<br>
+[MIT](LICENSE)
 
-<div align="center">
-    <br> github stats:
-    <img src="https://badgen.net/github/stars/ken107/read-aloud" >
-    <img src="https://badgen.net/github/open-issues/ken107/read-aloud" >
-    <img src="https://badgen.net/github/open-prs/ken107/read-aloud" >
-    <img src="https://badgen.net/github/tag/ken107/read-aloud" >
-    <img src="https://badgen.net/github/license/ken107/read-aloud/" >
-    <br> chrome web store stats:
-    <img src="https://badgen.net/chrome-web-store/users/hdhinadidafjejdhmfkjgnolgimiaplp" >
-    <img src="https://badgen.net/chrome-web-store/rating/hdhinadidafjejdhmfkjgnolgimiaplp" >
-    <img src="https://badgen.net/chrome-web-store/rating-count/hdhinadidafjejdhmfkjgnolgimiaplp" >
-    <img src="https://badgen.net/chrome-web-store/v/hdhinadidafjejdhmfkjgnolgimiaplp" >
-    <br> firefox addon stats:
-    <img src="https://badgen.net/amo/users/read-aloud" >
-    <img src="https://badgen.net/amo/rating/read-aloud" >
-    <img src="https://badgen.net/amo/reviews/read-aloud" >
-    <img src="https://badgen.net/amo/v/read-aloud" >
-</div>
-
-<br>
-
-<div align="center">
-	<sub>A little browser extension built with ❤︎ by <a href="https://github.com/ken107">Hai Phan</a> and <a href="https://github.com/ken107/read-aloud/graphs/contributors">contributors</a> </sub>
-</div>
-
-<hr />
-
-## 원본 프로젝트
-
-이 프로젝트는 [Read Aloud](https://github.com/ken107/read-aloud) 확장 프로그램을 기반으로 만들어졌습니다.
-
-## 기본 사용법
-
-### 확장 프로그램 버튼
-<img src="docs/images/demo-extension-button.gif">
-
-### 오른쪽 클릭 메뉴
-<img src="docs/images/demo-right-click.gif">
-
-
-## Advanced Usage
-
-### Shortcuts
-
-```yaml
-ALT/Option + P           : Play/Pause
-ALT/Option + O           : Stop
-ALT/Option + Comma       : Rewind
-ALT/Option + Period      : Forward
-```
-
-### Customization
-
-You can change the voice, reading speed, pitch, or enable text highlighting:
-
-1. Click the Read Aloud icon on the [Extensions menu](https://i.imgur.com/KTqFZ3Q.png).
-2. Stop any text that may be playing.
-3. Click on the Gear icon in the Read Aloud context menu. (It may take a second or two for settings to appear)
-
-
-### Using Premium Voices
-[Using Premium Voices (Google Wavenet & Amazon Polly)](docs/usage/premium-voices.md)
-
-
-## Installation
-
-### Chrome and Chromium-based browsers
-You can get the latest available Read Aloud Extension version from the [Chrome Web Store](https://chrome.google.com/webstore/detail/read-aloud-a-text-to-spee/hdhinadidafjejdhmfkjgnolgimiaplp).
-
-### Firefox
-You can get the latest version of Read Aloud Extension from the [Mozilla Add-ons website](https://addons.mozilla.org/en-US/firefox/addon/read-aloud/).
-
-#### Firefox install from source
-
-1. Create a build directory with `mkdir build`
-2. Run `npm run-script package`
-3. Extract the resulting zip file. You should see a `manifest.json` which will be used later.
-4. In Firefox, first make sure there isn't an existing read-aloud add-on already installed
-5. type `about:debugging` in the Address bar and enter.
-6. Click on "This Firefox" then click "Load Unpackaged Extension"
-7. Select the `manifest.json` file produced earlier.
-
-## Contribute
-
-- Star this GitHub repo :star:
-- Post about it on your social media (Twitter / Blogs / Facebook / Instagram etc).
-- Leave a positive review on the [Chrome Web Store](https://chrome.google.com/webstore/detail/read-aloud-a-text-to-spee/hdhinadidafjejdhmfkjgnolgimiaplp) or [Firefox Addon](https://addons.mozilla.org/en-US/firefox/addon/read-aloud/) pages.
-- Create pull requests, submit bugs, suggest new features or documentation updates 🛠
-	- To do so, go to [this page](https://github.com/ken107/read-aloud/issues) and click the *New issue* button.
-
-
-## Credits
-
-### Images
-
- - [Streamline Labs](https://lab.streamlineicons.com/)
- - [Freepik](https://www.freepik.com/free-vector/colorful-memphis-design-background-vector_3893585.htm)
+함께 들어 있는 외부 라이브러리(Mozilla Readability, jQuery, RxJS 등)와 영어 단어 목록(SCOWL)은 각자의 라이선스를 따릅니다.

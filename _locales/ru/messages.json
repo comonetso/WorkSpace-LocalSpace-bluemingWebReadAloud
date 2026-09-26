@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Read Aloud: Преобразование текста в речь"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "Read Aloud"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "Прочитайте вслух текущую статью на веб-странице одним щелчком мыши, используя преобразование текста в речь (TTS). Поддерживает более 40 языков."
@@ -84,7 +84,7 @@
     "message": "Выйти"
   },
   "player_tab_explanation": {
-    "message": "Функция «Чтение вслух» использует эту вкладку для воспроизведения звука. Эта вкладка автоматически закроется через 5 минут бездействия."
+    "message": "Blueming Web Read Aloud использует эту вкладку для воспроизведения звука. Эта вкладка автоматически закроется через 5 минут бездействия."
   },
   "player_hidethistab_link": {
     "message": "Скрыть эту вкладку"
@@ -93,7 +93,7 @@
     "message": "Скрыть эту вкладку?"
   },
   "player_hidethistab_dialog_body": {
-    "message": "Если вы скроете эту вкладку, «Читать вслух» будет воспроизводить аудио на текущей веб-странице. Это означает, что переход со страницы приведет к остановке речи. (Эту настройку можно отменить на странице параметров расширения)"
+    "message": "Если вы скроете эту вкладку, Blueming Web Read Aloud будет воспроизводить аудио на текущей веб-странице. Это означает, что переход со страницы приведет к остановке речи. (Эту настройку можно отменить на странице параметров расширения)"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "Скрывать"
@@ -105,7 +105,7 @@
     "message": "Запрошено разрешение"
   },
   "player_permission_dialog_body": {
-    "message": "Разрешить чтение вслух для воспроизведения звука?"
+    "message": "Разрешить Blueming Web Read Aloud воспроизводить звук?"
   },
   "player_permission_dialog_ok_button": {
     "message": "Разрешать"
@@ -129,10 +129,10 @@
     "message": "Невозможно прочитать вслух этот сайт"
   },
   "error_file_access": {
-    "message": "Вам необходимо предоставить доступ для Read Aloud к URL-адресам файлов в расширении [настройки](open-extension-settings)"
+    "message": "Вам необходимо предоставить доступ для Blueming Web Read Aloud к URL-адресам файлов в расширении [настройки](open-extension-settings)"
   },
   "error_add_permissions": {
-    "message": "Вам необходимо предоставить Read Aloud дополнительные [разрешения](request-permissions) для этого веб-сайта."
+    "message": "Вам необходимо предоставить Blueming Web Read Aloud дополнительные [разрешения](request-permissions) для этого веб-сайта."
   },
   "error_login_required": {
     "message": "Пожалуйста, [войдите](sign-in), чтобы использовать Премиум-голоса"
@@ -153,12 +153,12 @@
     "message": "Вернуться к параметрам"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloud хотел бы использовать Google Translate для преобразования текста в речь."
+    "message": "Blueming Web Read Aloud хотел бы использовать Google Translate для преобразования текста в речь."
   },
   "google_translate_allow_button": {
     "message": "Разрешить"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloud использует Google Translate для преобразования текста в речь.  Пожалуйста, держите эту вкладку открытой."
+    "message": "Blueming Web Read Aloud использует Google Translate для преобразования текста в речь.  Пожалуйста, держите эту вкладку открытой."
   }
 }

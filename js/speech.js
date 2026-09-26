@@ -14,19 +14,17 @@ function Speech(texts, options) {
 
   var self = this;
   const engine = pickEngine()
-  let piperState
   const events$ = new rxjs.Subject()
 
   this.options = options;
   this.events$ = events$.asObservable()
   //engines playing each segment's audio file through playAudio(): they report its position ("time" events)
   this.reportsAudioTime = [
-    premiumTtsEngine, googleTranslateTtsEngine, amazonPollyTtsEngine, googleWavenetTtsEngine,
+    googleTranslateTtsEngine, amazonPollyTtsEngine, googleWavenetTtsEngine,
     ibmWatsonTtsEngine, openaiTtsEngine, naverClovaTtsEngine, azureTtsEngine
   ].includes(engine)
-  //audio played through playAudio() can be muted without stopping playback;
-  //Piper does that only when it can't apply the rate itself (externalPlayback in PiperTtsEngine)
-  this.canMute = engine == piperTtsEngine ? !!(options.rate && options.rate != 1) : this.reportsAudioTime
+  //audio played through playAudio() can be muted without stopping playback
+  this.canMute = this.reportsAudioTime
   this.play = () => playbackState$.next("resumed")
   this.pause = () => playbackState$.next("paused")
   this.stop = () => cmd$.error({name: "CancellationException", message: "Playback cancelled"})
@@ -45,11 +43,11 @@ function Speech(texts, options) {
   this.changesRateVolumeInPlace = this.reportsAudioTime
   //engines whose voice follows the pitch; the others make the same audio whatever it is
   this.usesPitch = ![
-      premiumTtsEngine, googleTranslateTtsEngine, amazonPollyTtsEngine, ibmWatsonTtsEngine, openaiTtsEngine, azureTtsEngine
+      googleTranslateTtsEngine, amazonPollyTtsEngine, ibmWatsonTtsEngine, openaiTtsEngine, azureTtsEngine
     ].includes(engine)
     && !(engine == googleWavenetTtsEngine && /^GoogleChirp/.test(options.voice.voiceName))
-  //Piper takes rate/pitch/volume only when it starts speaking: changes apply from the next reading
-  this.appliesParamsLive = engine != piperTtsEngine
+  //every engine takes new rate/pitch/volume while reading (js/page-ui-host.js checks this)
+  this.appliesParamsLive = true
 
   //new rate/pitch/volume from the page bar ----------------------------------------
   //applied by the audio element (changesRateVolumeInPlace): same object, so prefetched audio stays usable
@@ -86,29 +84,21 @@ function Speech(texts, options) {
   this.gotoEnd = () => cmd$.next({name: "gotoEnd"})
 
   function pickEngine() {
-    if (isPiperVoice(options.voice)) return piperTtsEngine;
     if (isNaverClova(options.voice)) return naverClovaTtsEngine;
     if (isAzure(options.voice)) return azureTtsEngine;
     if (isOpenai(options.voice)) return openaiTtsEngine;
-    if (isUseMyPhone(options.voice)) return phoneTtsEngine;
     if (isGoogleTranslate(options.voice) && !/\s(Hebrew|Telugu)$/.test(options.voice.voiceName)) {
       return googleTranslateTtsEngine
     }
     if (isAmazonPolly(options.voice)) return amazonPollyTtsEngine;
     if (isGoogleWavenet(options.voice)) return googleWavenetTtsEngine;
     if (isIbmWatson(options.voice)) return ibmWatsonTtsEngine;
-    if (isPremiumVoice(options.voice) || isReadAloudCloud(options.voice)) {
-      premiumTtsEngine.prepare(options)
-      return premiumTtsEngine;
-    }
     if (isGoogleNative(options.voice)) return new TimeoutTtsEngine(browserTtsEngine, 3*1000, GOOGLE_NATIVE_END_TIMEOUT);
     return browserTtsEngine;
   }
 
-  //what the voice is given for a segment (js/spoken-text.js), while the page shows the segment as it is.
-  //Piper is given the text as it is: it tells where each sentence starts in what it reads (piperState)
+  //what the voice is given for a segment (js/spoken-text.js), while the page shows the segment as it is
   function spokenOf(text) {
-    if (engine == piperTtsEngine) return {text, sourceIndex: i => i}
     return spokenText(text)
   }
   //if it can't be made, the voice reads the text as it is rather than not at all
@@ -135,7 +125,6 @@ function Speech(texts, options) {
         return fitSpoken(new CharBreaker(200, punctuator, null, options.splitParagraphs).breakText(text),
           text => text.length, 200, limit => new CharBreaker(limit, punctuator, null, options.splitParagraphs));
       }
-      else if (isPiperVoice(options.voice)) return [text];
       else return new CharBreaker(750, punctuator, 200, options.splitParagraphs).breakText(text);
     }
   }
@@ -162,12 +151,11 @@ function Speech(texts, options) {
 
   function getInfo() {
     return {
-      texts: piperState ? piperState.texts : texts,
+      texts: texts,
       position: {
-        index: piperState ? piperState.index : playlist.getIndex()
+        index: playlist.getIndex()
       },
       isRTL: /^(ar|az|dv|he|iw|ku|fa|ur)\b/.test(options.lang),
-      isPiper: engine == piperTtsEngine,
     }
   }
 
@@ -258,27 +246,13 @@ function Speech(texts, options) {
       //announce "end" before moving on, otherwise listeners get the next segment's "load" first
       if (event.type == "end") events$.next({...event, index: playlist.getIndex()})
       switch (event.type) {
-        case "start":
-          if (event.sentenceStartIndicies) {
-            piperState = {
-              texts: event.sentenceStartIndicies.map((startIndex, i, arr) => texts[0].slice(startIndex, arr[i+1])),
-              sentenceStartIndicies: event.sentenceStartIndicies,
-              index: 0
-            }
-          } else {
-            const nextText = texts[playlist.getIndex() + 1]
-            if (nextText && engine.prefetch != null) engine.prefetch(spokenOf(nextText).text, options)
-          }
+        case "start": {
+          const nextText = texts[playlist.getIndex() + 1]
+          if (nextText && engine.prefetch != null) engine.prefetch(spokenOf(nextText).text, options)
           break
-        case "sentence":
-          if (piperState) {
-            piperState.index = piperState.sentenceStartIndicies.indexOf(event.startIndex)
-          }
-          break
+        }
         case "end":
-          if (piperState) {
-            cmd$.complete()
-          } else if (!movePending) {
+          if (!movePending) {
             //a forward/rewind already waiting for its delay decides where to go next
             cmd$.next({name: "forward"})
           }

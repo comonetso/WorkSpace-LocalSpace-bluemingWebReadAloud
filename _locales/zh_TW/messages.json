@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Read Aloud: 文字語音朗讀助理"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "Read Aloud"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "輕輕點選，即可為您朗讀頁面上的文字。（目前支援超過 40 種以上的語言）"
@@ -84,7 +84,7 @@
     "message": "登出"
   },
   "player_tab_explanation": {
-    "message": "大聲朗讀使用此選項卡進行音頻播放。此選項卡將在 5 分鐘無活動後自動關閉。"
+    "message": "Blueming Web Read Aloud 使用此選項卡進行音頻播放。此選項卡將在 5 分鐘無活動後自動關閉。"
   },
   "player_hidethistab_link": {
     "message": "隱藏此選項卡"
@@ -93,7 +93,7 @@
     "message": "隱藏此選項卡？"
   },
   "player_hidethistab_dialog_body": {
-    "message": "如果隱藏此選項卡，大聲朗讀將在當前網頁內播放音頻。這意味著離開頁面將導致語音停止。 （此設置可以從擴展選項頁面恢復）"
+    "message": "如果隱藏此選項卡，Blueming Web Read Aloud 將在當前網頁內播放音頻。這意味著離開頁面將導致語音停止。 （此設置可以從擴展選項頁面恢復）"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "隱藏"
@@ -105,7 +105,7 @@
     "message": "請求許可"
   },
   "player_permission_dialog_body": {
-    "message": "允許大聲朗讀播放音頻嗎？"
+    "message": "允許 Blueming Web Read Aloud 播放音頻嗎？"
   },
   "player_permission_dialog_ok_button": {
     "message": "允許"
@@ -129,10 +129,10 @@
     "message": "無法朗讀這個網站"
   },
   "error_file_access": {
-    "message": "您需要在擴展 [設置](open-extension-settings) 中授予對文件 URL 的大聲朗讀訪問權限"
+    "message": "您需要在擴展 [設置](open-extension-settings) 中授予 Blueming Web Read Aloud 對文件 URL 的訪問權限"
   },
   "error_add_permissions": {
-    "message": "您需要授予大聲朗讀此網站的額外[權限](request-permissions)"
+    "message": "您需要為此網站授予 Blueming Web Read Aloud 額外的[權限](request-permissions)"
   },
   "error_login_required": {
     "message": "請[登錄](sign-in)以使用高級語音"
@@ -153,12 +153,12 @@
     "message": "返回選項"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloud 希望使用 Google Translate 進行語音合成。"
+    "message": "Blueming Web Read Aloud 希望使用 Google Translate 進行語音合成。"
   },
   "google_translate_allow_button": {
     "message": "允許"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloud 正在使用 Google Translate 進行語音合成。請保持此標籤打開。"
+    "message": "Blueming Web Read Aloud 正在使用 Google Translate 進行語音合成。請保持此標籤打開。"
   }
 }

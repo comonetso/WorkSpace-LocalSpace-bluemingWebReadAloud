@@ -3,105 +3,16 @@ const isEmbedded = top != self
 var queryString = new URLSearchParams(location.search)
 var activeDoc;
 var playbackError = null;
-var lastUrlPromise = Promise.resolve(null)
-
-
-const piperSubject = new rxjs.Subject()
-const piperObservable = rxjs.defer(() => {
-    createPiperFrame()
-    return piperSubject
-  })
-  .pipe(
-    rxjs.shareReplay({bufferSize: 1, refCount: false})
-  )
-const piperCallbacks = new rxjs.Subject()
-const piperDispatcher = makeDispatcher("piper-host", {
-  advertiseVoices({voices}, sender) {
-    updateSettings({piperVoices: voices})
-    piperSubject.next(sender)
-  },
-  onStart: args => piperCallbacks.next({type: "start", ...args}),
-  onSentence: args => piperCallbacks.next({type: "sentence", ...args}),
-  onParagraph: args => piperCallbacks.next({type: "paragraph", ...args}),
-  onEnd: args => piperCallbacks.next({type: "end", ...args}),
-  onError: args => piperCallbacks.next({type: "error", ...args}),
-  audioPlay: args => audioPlayer.play(args.src, args.rate, args.volume),
-  audioPause: () => audioPlayer.pause(),
-  audioResume: () => audioPlayer.resume(),
-})
-
-const audioPlayer = immediate(() => {
-  let current
-  return {
-    play(src, rate, volume) {
-      if (current) current.playback.unsubscribe()
-      const url = (src instanceof Blob) ? URL.createObjectURL(src) : src
-      const playbackState$ = new rxjs.BehaviorSubject("resumed")
-      return new Promise((fulfill, reject) => {
-        current = {
-          playbackState$,
-          playback: playAudio(Promise.resolve(url), {rate, volume}, playbackState$).subscribe({
-            complete: fulfill,
-            error: reject
-          })
-        }
-      })
-    },
-    pause() {
-      if (current) current.playbackState$.next("paused")
-    },
-    resume() {
-      if (current) current.playbackState$.next("resumed")
-    }
-  }
-})
-
-
-const fasttextSubject = new rxjs.Subject()
-const fasttextObservable = rxjs.defer(() => {
-    createFasttextFrame()
-    return fasttextSubject
-  })
-  .pipe(
-    rxjs.startWith(null),
-    rxjs.shareReplay({bufferSize: 1, refCount: false})
-  )
-const fasttextDispatcher = makeDispatcher("fasttext-host", {
-  onServiceReady(args, sender) {
-    fasttextSubject.next(sender)
-  }
-})
-
-
-window.addEventListener("message", event => {
-  const send = message => event.source.postMessage(message, {targetOrigin: event.origin})
-
-  piperDispatcher.dispatch(event.data, {
-    sendRequest(method, args) {
-      const id = String(Math.random())
-      send({from: "piper-host", to: "piper-service", type: "request", id, method, args})
-      return piperDispatcher.waitForResponse(id)
-    }
-  }, send)
-
-  fasttextDispatcher.dispatch(event.data, {
-    sendRequest(method, args) {
-      const id = String(Math.random())
-      send({from: "fasttext-host", to: "fasttext-service", type: "request", id, method, args})
-      return fasttextDispatcher.waitForResponse(id)
-    }
-  }, send)
-})
 
 
 
 const idleSubject = new rxjs.BehaviorSubject(true)
 
 if (queryString.has("autoclose"))
-  rxjs.combineLatest(idleSubject, piperSubject.pipe(rxjs.startWith(null)))
+  idleSubject
     .pipe(
-      rxjs.switchMap(([isIdle, piper]) => {
-        if (isIdle) return rxjs.timer(queryString.get("autoclose") == "long" || piper ? 15*60*1000 : 5*60*1000)
+      rxjs.switchMap(isIdle => {
+        if (isIdle) return rxjs.timer(queryString.get("autoclose") == "long" ? 15*60*1000 : 5*60*1000)
         else return rxjs.EMPTY
       })
     )
@@ -123,10 +34,6 @@ var messageHandlers = {
   //inside a page (not a tab of its own): which tab it's in (js/events.js readyPlayer)
   getPlayerTab: () => ({embedded: isEmbedded, tabId: isEmbedded ? Number(queryString.get("tab")) || null : null}),
   shouldPlaySilence: shouldPlaySilence.bind({}),
-  startPairing: () => phoneTtsEngine.startPairing(),
-  isPaired: () => phoneTtsEngine.isPaired(),
-  managePiperVoices,
-  getLastUrl: () => lastUrlPromise,
   beginUiSession: ui => pageUiHost.begin(ui),
 }
 
@@ -253,7 +160,6 @@ function openDoc(source, onEnd, uiOpts) {
   })
   pageUiHost.attachDoc(activeDoc, uiOpts)
   idleSubject.next(false)
-  lastUrlPromise = Promise.resolve(source.getUri())
 }
 
 function closeDoc() {
@@ -290,21 +196,15 @@ function closePlayer() {
 }
 
 function handleError(err) {
-  if (err) {
-    var code = /^{/.test(err.message) ? JSON.parse(err.message).code : err.message;
-    if (code == "error_payment_required") clearSettings(["voiceName"]);
-    reportError(err);
-  }
+  if (err) reportError(err);
 }
 
+//logged to the console only
 function reportError(err) {
   if (err && err.stack) {
     var details = err.stack;
     if (!details.startsWith(err.name)) details = err.name + ": " + err.message + "\n" + details;
     console.error(details)
-    lastUrlPromise
-      .then(url => bgPageInvoke("reportIssue", [url, details]))
-      .catch(console.error)
   }
 }
 
@@ -338,7 +238,7 @@ async function createOffscreen() {
   const readyPromise = new Promise(f => messageHandlers.offscreenCheckIn = f)
   brapi.offscreen.createDocument({
     reasons: ["AUDIO_PLAYBACK"],
-    justification: "Read Aloud would like to play audio in the background",
+    justification: "Blueming Web Read Aloud would like to play audio in the background",
     url: brapi.runtime.getURL("offscreen.html")
   })
   await readyPromise
@@ -444,44 +344,4 @@ async function shouldPlaySilence(providerId) {
       return should
     }
   }
-}
-
-function managePiperVoices() {
-  if (isEmbedded) {
-    return "POPOUT"
-  }
-  else {
-    rxjs.firstValueFrom(piperObservable)
-      .catch(console.error)
-    brapi.tabs.getCurrent()
-      .then(tab => Promise.all([
-        brapi.windows.update(tab.windowId, {focused: true}),
-        brapi.tabs.update(tab.id, {active: true})
-      ]))
-      .catch(console.error)
-    return "OK"
-  }
-}
-
-function createPiperFrame() {
-  const f = document.createElement("iframe")
-  f.id = "piper-frame"
-  f.src = "https://piper.ttstool.com/"
-  f.allow = "cross-origin-isolated"
-  f.style.position = "absolute"
-  f.style.left =
-  f.style.top = "0"
-  f.style.width =
-  f.style.height = "100%"
-  f.style.borderWidth = "0"
-  document.body.appendChild(f)
-}
-
-function createFasttextFrame() {
-  const f = document.createElement("iframe")
-  f.id = "fasttext-frame"
-  f.src = "https://ttstool.com/fasttext/index.html"
-  f.allow = "cross-origin-isolated"
-  f.style.display = "none"
-  document.body.appendChild(f)
 }

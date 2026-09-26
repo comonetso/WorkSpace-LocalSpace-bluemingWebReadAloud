@@ -29,33 +29,6 @@
 
 
 
-  //account button
-  domReadyPromise
-    .then(() => {
-      $("#account-button")
-        .click(function () {
-          getAuthToken({ interactive: true })
-            .then(token => brapi.tabs.create({ url: config.webAppUrl + "/premium-voices.html?t=" + token }))
-            .catch(handleError)
-          return false;
-        })
-      $("#logout-button")
-        .click(function () {
-          clearAuthToken()
-          return false;
-        })
-    })
-
-  rxjs.combineLatest([
-    observeSetting("authToken").pipe(
-      rxjs.switchMap(token => token ? getAccountInfo(token) : Promise.resolve(null))
-    ),
-    domReadyPromise
-  ])
-    .subscribe(([account]) => showAccountInfo(account))
-
-
-
   //hotkey
   domReadyPromise
     .then(() => {
@@ -74,8 +47,6 @@
           var voiceName = $(this).val();
           if (voiceName == "@custom") brapi.tabs.create({ url: "custom-voices.html" });
           else if (voiceName == "@languages") brapi.tabs.create({ url: "languages.html" });
-          else if (voiceName == "@premium") brapi.tabs.create({ url: "premium-voices.html" });
-          else if (voiceName == "@piper") bgPageInvoke("managePiperVoices").catch(console.error)
           else updateSettings({ voiceName })
         });
       $("#languages-edit-button")
@@ -258,9 +229,17 @@
 
 
   //buttons
+  //sample sentence for the test button, by language (English for the others)
+  const demoSpeechText = {
+    ko: "안녕하세요. 선택한 음성으로 읽어 드리는 예시 문장입니다.",
+    en: "Hello. This is a sample sentence read with the selected voice.",
+    ja: "こんにちは。選択した音声で読み上げる例文です。",
+    zh: "你好。这是用所选语音朗读的示例句子。",
+    es: "Hola. Esta es una frase de ejemplo leída con la voz seleccionada.",
+  }
+
   domReadyPromise
     .then(() => {
-      var demoSpeech = {};
       const statusTracker$ = new rxjs.Subject()
       statusTracker$.pipe(
         rxjs.switchMap(() =>
@@ -281,10 +260,7 @@
             var lang = (voice && voice.lang || "en-US").split("-")[0];
             $("#test-voice .spinner").show();
             $("#status").parent().hide();
-            if (!demoSpeech[lang]) {
-              demoSpeech[lang] = await ajaxGet(config.serviceUrl + "/read-aloud/get-demo-speech-text/" + lang).then(JSON.parse)
-            }
-            await bgPageInvoke("playText", [demoSpeech[lang].text, { lang: lang }])
+            await bgPageInvoke("playText", [demoSpeechText[lang] || demoSpeechText.en, { lang: lang }])
             statusTracker$.next()
           }
           catch (err) {
@@ -337,21 +313,16 @@
     var voices = !selectedLangs ? allVoices : allVoices.filter(
       function (voice) {
         return !voice.lang || selectedLangs.includes(voice.lang.split('-', 1)[0])
-          || isPiperVoice(voice)
           || isOpenai(voice)
       });
 
-    //group by standard/premium
+    //group by offline/standard
     var groups = Object.assign({
-      piper: [],
       offline: [],
-      premium: [],
       standard: [],
     },
       voices.groupBy(function (voice) {
-        if (isPiperVoice(voice)) return "piper"
         if (isOfflineVoice(voice)) return "offline"
-        if (isPremiumVoice(voice)) return "premium";
         return "standard"
       }))
     for (var name in groups) groups[name].sort(voiceSorter);
@@ -367,22 +338,6 @@
         .appendTo(offline)
     }
 
-    //create piper group
-    $("<optgroup>").appendTo("#voices")
-    const piper = $("<optgroup>")
-      .attr("label", brapi.i18n.getMessage("options_voicegroup_piper"))
-      .appendTo("#voices")
-    for (const voice of groups.piper) {
-      $("<option>")
-        .val(voice.voiceName)
-        .text(voice.voiceName)
-        .appendTo(piper)
-    }
-    $("<option>")
-      .val("@piper")
-      .text(brapi.i18n.getMessage("options_enable_piper_voices"))
-      .appendTo(piper)
-
     //create the standard optgroup
     $("<optgroup>").appendTo($("#voices"))
     var standard = $("<optgroup>")
@@ -397,22 +352,6 @@
         .val(voice.voiceName)
         .text(displayName)
         .appendTo(standard);
-    });
-
-    //create the premium optgroup
-    $("<optgroup>").appendTo($("#voices"));
-    var premium = $("<optgroup>")
-      .attr("label", brapi.i18n.getMessage("options_voicegroup_premium"))
-      .appendTo($("#voices"));
-    groups.premium.forEach(function (voice) {
-      var displayName = voice.voiceName
-      if (voice.lang === "ko-KR" && voice.gender) {
-        displayName = voice.voiceName + " (" + (voice.gender === "female" ? "여" : "남") + ")"
-      }
-      $("<option>")
-        .val(voice.voiceName)
-        .text(displayName)
-        .appendTo(premium);
     });
 
     //create the additional optgroup
@@ -457,8 +396,6 @@
 
       // 기존 로직 유지
       if (!isNativeVoice(voice)) weight += 5
-      if (!isReadAloudCloud(voice)) weight += 1
-      if (isUseMyPhone(voice)) weight += 1
       return weight
     }
     return getWeight(a) - getWeight(b) || a.voiceName.localeCompare(b.voiceName)
@@ -476,27 +413,12 @@
       $("#status").html(formatError(errInfo)).parent().show();
       $("#status a").click(function () {
         switch ($(this).attr("href")) {
-          case "#sign-in":
-            getAuthToken({ interactive: true })
-              .then(function (token) {
-                if (token) {
-                  $("#test-voice").click();
-                  getAccountInfo(token).then(showAccountInfo);
-                }
-              })
-              .catch(function (err) {
-                $("#status").text(err.message).parent().show();
-              })
-            break;
           case "#auth-wavenet":
             brapi.permissions.request(config.wavenetPerms)
               .then(function (granted) {
                 if (granted) bgPageInvoke("authWavenet");
               })
             break;
-          case "#connect-phone":
-            location.href = "connect-phone.html"
-            break
         }
       })
     }
@@ -521,18 +443,6 @@
       $("#status").text(err.message).parent().show();
     }
   }
-
-  function showAccountInfo(account) {
-    if (account) {
-      $("#account-email").text(account.email);
-      $("#account-info").show();
-    }
-    else {
-      $("#account-info").hide();
-    }
-  }
-
-
 
   function createSlider(elem, { onChange, onSlideChange }) {
     var min = $(elem).data("min") || 0;

@@ -131,17 +131,6 @@ body:not(.is-popup) #toolbar .btn-group.window-size {
 }
 
 
-#footer {
-  text-align: center;
-  font-size: small;
-  line-height: 1.3em;
-  color: #888;
-  white-space: nowrap;
-}
-#footer:not(.announcement) a {
-  color: #aaa;
-}
-
 #status {
   min-width: 250px;
   font-size: small;

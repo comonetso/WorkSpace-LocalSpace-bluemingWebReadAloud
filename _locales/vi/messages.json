@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Đọc Cho Tôi Nghe"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "Đọc Tui Nghe"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "Đọc nghe nội dung trang web - tiếng Anh và Việt. Dùng nghe đọc tin tức, truyện online. Giọng đọc hay, tiện ích dễ xài."
@@ -84,7 +84,7 @@
     "message": "Đăng xuất"
   },
   "player_tab_explanation": {
-    "message": "Đọc to sử dụng tab này để phát lại âm thanh. Tab này sẽ tự động đóng sau 5 phút không hoạt động."
+    "message": "Blueming Web Read Aloud sử dụng tab này để phát lại âm thanh. Tab này sẽ tự động đóng sau 5 phút không hoạt động."
   },
   "player_hidethistab_link": {
     "message": "Ẩn tab này"
@@ -93,7 +93,7 @@
     "message": "Ẩn tab này?"
   },
   "player_hidethistab_dialog_body": {
-    "message": "Nếu bạn ẩn tab này, Đọc to sẽ phát âm thanh bên trong trang web hiện tại. Điều này có nghĩa là điều hướng khỏi trang sẽ khiến bài phát biểu dừng lại. (Cài đặt này có thể được hoàn nguyên từ trang Tùy chọn tiện ích mở rộng)"
+    "message": "Nếu bạn ẩn tab này, Blueming Web Read Aloud sẽ phát âm thanh bên trong trang web hiện tại. Điều này có nghĩa là điều hướng khỏi trang sẽ khiến bài phát biểu dừng lại. (Cài đặt này có thể được hoàn nguyên từ trang Tùy chọn tiện ích mở rộng)"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "Ẩn tab"
@@ -105,7 +105,7 @@
     "message": "Yêu cầu quyền"
   },
   "player_permission_dialog_body": {
-    "message": "Cho phép Đọc to để phát âm thanh?"
+    "message": "Cho phép Blueming Web Read Aloud phát âm thanh?"
   },
   "player_permission_dialog_ok_button": {
     "message": "Cho phép"
@@ -129,10 +129,10 @@
     "message": "Không thể đọc to trang web này"
   },
   "error_file_access": {
-    "message": "Bạn cần cấp quyền Đọc to cho các URL của tệp trong phần mở rộng [cài đặt](open-extension-settings)"
+    "message": "Bạn cần cấp quyền cho Blueming Web Read Aloud truy cập các URL của tệp trong phần mở rộng [cài đặt](open-extension-settings)"
   },
   "error_add_permissions": {
-    "message": "Bạn cần cấp thêm [quyền](request-permissions) Đọc to cho trang web này"
+    "message": "Bạn cần cấp thêm [quyền](request-permissions) cho Blueming Web Read Aloud trên trang web này"
   },
   "error_login_required": {
     "message": "Vui lòng [đăng nhập](sign-in) để sử dụng các giọng chất lượng cao"
@@ -153,12 +153,12 @@
     "message": "Trở về"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloud muốn sử dụng Google Dịch để tổng hợp giọng nói."
+    "message": "Blueming Web Read Aloud muốn sử dụng Google Dịch để tổng hợp giọng nói."
   },
   "google_translate_allow_button": {
     "message": "Cho phép"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloud đang sử dụng Google Dịch để tổng hợp giọng nói. Vui lòng giữ tab này mở."
+    "message": "Blueming Web Read Aloud đang sử dụng Google Dịch để tổng hợp giọng nói. Vui lòng giữ tab này mở."
   }
 }

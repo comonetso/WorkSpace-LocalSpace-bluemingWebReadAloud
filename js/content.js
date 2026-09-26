@@ -45,8 +45,7 @@
     else if (location.hostname == "www.webnovel.com" && location.pathname.startsWith("/book/")) return ["js/content/webnovel.js"];
     else if (location.hostname == "archiveofourown.org") return ["js/content/archiveofourown.js"];
     else if (location.hostname == "chat.openai.com") return ["js/content/chatgpt.js"];
-    else if (location.pathname.match(/readaloud\.html$/)
-      || location.pathname.match(/\.pdf$/)
+    else if (location.pathname.match(/\.pdf$/)
       || $("embed[type='application/pdf']").length
       || $("iframe[src*='.pdf']").length) return ["js/content/pdf-doc.js"];
     else if (/^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)
@@ -192,61 +191,7 @@ function simulateClick(elementToClick) {
   simulateMouseEvent (elementToClick, "click", coordX, coordY);
 }
 
-const getMath = (function() {
-  let promise = Promise.resolve(null)
-  return () => promise = promise.then(math => math || makeMath())
-})();
-
-async function makeMath() {
-  const getXmlFromMathEl = function(mathEl) {
-    const clone = mathEl.cloneNode(true)
-    $("annotation, annotation-xml", clone).remove()
-    removeAllAttrs(clone, true)
-    return clone.outerHTML
-  }
-
-  //determine the mml markup
-  const math =
-    when(document.querySelector(".MathJax, .MathJax_Preview"), {
-      selector: ".MathJax[data-mathml]",
-      getXML(el) {
-        const mathEl = el.querySelector("math")
-        return mathEl ? getXmlFromMathEl(mathEl) : el.getAttribute("data-mathml")
-      },
-    })
-    .when(() => document.querySelector("math"), {
-      selector: "math",
-      getXML: getXmlFromMathEl,
-    })
-    .else(null)
-
-  if (!math) return null
-  const elems = $(math.selector).get()
-  if (!elems.length) return null
-
-  //create speech surrogates
-  try {
-    const xmls = elems.map(math.getXML)
-    const texts = await ajaxPost(config.serviceUrl + "/read-aloud/mathml", xmls, "json").then(JSON.parse)
-    elems.forEach((el, i) => $("<span>").addClass("readaloud-mathml").text(texts[i] || "math expression").insertBefore(el))
-  }
-  catch (err) {
-    console.error(err)
-    return {
-      show() {},
-      hide() {}
-    }
-  }
-
-  //return functions to toggle between mml and speech
-  return {
-    show() {
-      for (const el of elems) el.style.setProperty("display", "none", "important")
-      $(".readaloud-mathml").show()
-    },
-    hide() {
-      $(elems).css("display", "")
-      $(".readaloud-mathml").hide()
-    }
-  }
+//math is read as the page shows it: no speech surrogates to toggle (callers skip a null)
+function getMath() {
+  return Promise.resolve(null)
 }

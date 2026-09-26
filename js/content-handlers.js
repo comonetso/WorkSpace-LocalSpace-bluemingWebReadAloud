@@ -12,14 +12,17 @@ var contentHandlers = [
     }
   },
 
-  // PDF file:// --------------------------------------------------------------
+  // PDF ------------------------------------------------------------------------
+  // PDF files can't be read: there is no PDF viewer to extract their text (web PDFs get the same
+  // error from js/content/pdf-doc.js)
   {
     match: function(url) {
-      return /^file:.*\.pdf$/i.test(url.split("?")[0]);
+      return /^file:.*\.pdf$/i.test(url.split("?")[0])
+        || url.startsWith("chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/")   //Adobe Acrobat extension
+        || url.startsWith("https://web.kamihq.com/web/viewer.html?source=extension_pdfhandler&")   //Kami extension
     },
-    validate: async function(tab) {
-      await setTabUrl(tab.id, config.pdfViewerUrl)
-      throw new Error(JSON.stringify({code: "error_upload_pdf"}))
+    validate: function() {
+      throw new Error(JSON.stringify({code: "error_page_unreadable"}));
     }
   },
 
@@ -189,35 +192,6 @@ var contentHandlers = [
     getSourceUri: function() {
       return "epubreader:jhhclmfgfllimlhabjkgkeebkbiadflb"
     }
-  },
-
-  // Read Aloud PDF viewer ---------------------------------------------------
-  {
-    match: url => url.startsWith(brapi.runtime.getURL("pdf-viewer.html")),
-    getSourceUri: () => "pdfviewer:",
-  },
-
-  // Adobe Acrobat extension -------------------------------------------------
-  {
-    match: url => url.startsWith("chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/"),
-    async validate(tab) {
-      const pdfUrl = tab.url.substr(52)
-      if (pdfUrl.startsWith("file://")) {
-        await setTabUrl(tab.id, config.pdfViewerUrl)
-        throw new Error(JSON.stringify({code: "error_upload_pdf"}))
-      }
-      else {
-        await openPdfViewer(tab.id, pdfUrl)
-      }
-    },
-    getSourceUri: () => "pdfviewer:",
-  },
-
-  // Kami extension -----------------------------------------------------------
-  {
-    match: url => url.startsWith("https://web.kamihq.com/web/viewer.html?source=extension_pdfhandler&"),
-    validate: tab => openPdfViewer(tab.id, new URL(tab.url).searchParams.get("file")),
-    getSourceUri: () => "pdfviewer:",
   },
 
   // LibbyApp ---------------------------------------------------------------

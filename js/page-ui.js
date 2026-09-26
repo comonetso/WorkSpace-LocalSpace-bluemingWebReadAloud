@@ -1,5 +1,5 @@
 /*
- * Page playback UI — injected into the web page by js/events.js (and loaded by pdf-viewer.html).
+ * Page playback UI — injected into the web page by js/events.js.
  *   bar        playback bar fixed to the top of the page: progress, elapsed/total time,
  *              previous/next paragraph, pause/resume, mute, stop
  *   highlight  marks the part of the right-click selection that is being read
@@ -71,7 +71,7 @@
       map = mapTextToNodes(text, range)
     }
     catch (err) {
-      console.error("Read Aloud: cannot map the selection", err)
+      console.error("Blueming Web Read Aloud: cannot map the selection", err)
     }
     if (map) captured = {sessionId, text, range, released: false, ...map}
     return {text, mappable: !!map}
@@ -468,8 +468,7 @@
 
   //playback bar -------------------------------------------------------------------
 
-  //options.onRemove: called when the bar goes away (the PDF viewer moves its toolbar back)
-  function startBar(sessionId, options) {
+  function startBar(sessionId) {
     removeBar()
     const port = brapi.runtime.connect({name: PORT_NAME})
     const host = document.createElement("readaloud-hrg-bar")
@@ -524,7 +523,7 @@
     //the page's own mouse/key handlers (copy protection, shortcut keys) must not get the panel's input
     for (const type of ["mousedown", "pointerdown", "keydown"]) els.panel.addEventListener(type, event => event.stopPropagation())
 
-    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null, onRemove: options && options.onRemove}
+    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null}
     renderPlayButton("LOADING")
     //on <html>, not <body>: a transform/filter on body would make "fixed" relative to the body
     document.documentElement.append(host)
@@ -588,13 +587,12 @@
 
   function removeBar() {
     if (!bar) return
-    const {port, host, timer, onOutside, onRemove} = bar
+    const {port, host, timer, onOutside} = bar
     bar = null
     clearTimeout(timer)
     if (onOutside) listenOutside(onOutside, false)
     host.remove()
     try { port.disconnect() } catch (err) {}
-    if (onRemove) onRemove()
   }
 
   //on the window in the capture phase: pages that stop or cancel pointer/mouse events further down

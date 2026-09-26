@@ -1,7 +1,7 @@
 {
-  "name": "read-aloud-hrg",
+  "name": "blueming-web-read-aloud",
   "version": "2.20.0",
-  "description": "Text to speech with Naver Clova API support",
+  "description": "Blueming Web Read Aloud: a Chrome extension that reads web pages and selected text aloud, with Naver Clova voices",
   "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

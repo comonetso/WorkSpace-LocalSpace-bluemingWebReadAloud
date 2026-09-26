@@ -49,3 +49,9 @@ clova_tts_output.mp3
 
 # Editor settings
 .vscode/
+
+# Development notes — kept local, not in the public repo
+CLAUDE.md
+.agent/
+docs/session_logs/
+docs/codex_rescue/

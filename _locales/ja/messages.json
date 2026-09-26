@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Read Aloud: テキスト読み上げ音声リーダー"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "読み上げる"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "ワンクリックで現在のウェブページの記事を読み上げます。 40以上の言語をサポートします。"
@@ -84,7 +84,7 @@
     "message": "ログアウト"
   },
   "player_tab_explanation": {
-    "message": "読み上げでは、このタブを使用して音声を再生します。このタブは、5 分間操作がないと自動的に閉じます。"
+    "message": "Blueming Web Read Aloudは、このタブを使用して音声を再生します。このタブは、5 分間操作がないと自動的に閉じます。"
   },
   "player_hidethistab_link": {
     "message": "このタブを非表示"
@@ -93,7 +93,7 @@
     "message": "このタブを非表示にしますか?"
   },
   "player_hidethistab_dialog_body": {
-    "message": "このタブを非表示にすると、読み上げは現在の Web ページ内で音声を再生します。これは、ページから離れると音声が停止することを意味します。 (この設定は、拡張機能の [オプション] ページから元に戻すことができます)"
+    "message": "このタブを非表示にすると、Blueming Web Read Aloudは現在の Web ページ内で音声を再生します。これは、ページから離れると音声が停止することを意味します。 (この設定は、拡張機能の [オプション] ページから元に戻すことができます)"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "隠れる"
@@ -105,7 +105,7 @@
     "message": "許可が必要です"
   },
   "player_permission_dialog_body": {
-    "message": "音声の再生を読み上げに許可しますか?"
+    "message": "音声の再生をBlueming Web Read Aloudに許可しますか?"
   },
   "player_permission_dialog_ok_button": {
     "message": "許可する"
@@ -129,10 +129,10 @@
     "message": "このウェブサイトを読み上げることはできません"
   },
   "error_file_access": {
-    "message": "拡張子[設定](open-extension-settings)のファイルURLへの読み上げアクセスを許可する必要があります "
+    "message": "拡張子[設定](open-extension-settings)のファイルURLへのBlueming Web Read Aloudのアクセスを許可する必要があります "
   },
   "error_add_permissions": {
-    "message": "このウェブサイトにReadAloudの追加の[権限](request-permissions)を付与する必要があります"
+    "message": "このウェブサイトにBlueming Web Read Aloudの追加の[権限](request-permissions)を付与する必要があります"
   },
   "error_login_required": {
     "message": "プレミアムボイスを使用するには、[サインイン](sign-in)してください"
@@ -153,12 +153,12 @@
     "message": "オプションに戻る"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloudは、テキスト読み上げにGoogle翻訳を使用しようとしています。"
+    "message": "Blueming Web Read Aloudは、テキスト読み上げにGoogle翻訳を使用しようとしています。"
   },
   "google_translate_allow_button": {
     "message": "許可する"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloudは、テキスト読み上げにGoogle翻訳を使用しています。このタブは開いたままにしてください。"
+    "message": "Blueming Web Read Aloudは、テキスト読み上げにGoogle翻訳を使用しています。このタブは開いたままにしてください。"
   }
 }

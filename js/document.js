@@ -47,10 +47,6 @@ function TabSource() {
             return res
           })
       }
-      else if (uri.startsWith("pdfviewer:")) {
-        sendToSource = sendToPdfViewer
-        return sendToSource({method: "getDocumentInfo"})
-      }
       else throw new Error("Invalid source")
     })
     .finally(function() {
@@ -114,17 +110,6 @@ function TabSource() {
         .map(node => node.innerText && node.innerText.trim().replace(/\r?\n/g, " "))
         .filter(text => text)
     }
-  }
-
-  async function sendToPdfViewer(message) {
-    message.dest = "pdfViewer"
-    const result = await brapi.runtime.sendMessage(message)
-      .catch(err => {
-        if (/^(A listener indicated|Could not establish)/.test(err.message)) throw new Error(err.message + " " + message.method)
-        throw err
-      })
-    if (result && result.error) throw result.error
-    else return result
   }
 }
 
@@ -258,20 +243,10 @@ function Doc(source, onEnd) {
   }
 
   function detectLanguageOf(text) {
-    if (text.length < 100) {
-      //too little text, use cloud detection for improved accuracy
-      return serverDetectLanguage(text)
-        .then(function(result) {
-          return result || browserDetectLanguage(text)
-        })
-        .then(function(lang) {
-          //exclude commonly misdetected languages
-          return ["cy", "eo"].includes(lang) ? null : lang
-        })
-    }
     return browserDetectLanguage(text)
-      .then(function(result) {
-        return result || serverDetectLanguage(text);
+      .then(function(lang) {
+        //too little text: exclude commonly misdetected languages
+        return text.length < 100 && ["cy", "eo"].includes(lang) ? null : lang
       })
   }
 
@@ -290,30 +265,6 @@ function Doc(source, onEnd) {
         return null;
       }
     })
-  }
-
-  async function serverDetectLanguage(text) {
-    try {
-      const service = await rxjs.firstValueFrom(fasttextObservable)
-      if (!service) throw new Error("FastText service unavailable")
-      const [prediction] = await service.sendRequest("detectLanguage", {text})
-      return prediction?.language
-    }
-    catch (err) {
-      console.error(err)
-
-      return ajaxPost(config.serviceUrl + "/read-aloud/detect-language", {text: text}, "json")
-        .then(JSON.parse)
-        .then(function(res) {
-          var result = Array.isArray(res) ? res[0] : res
-          if (result && result.language && result.language != "und") return result.language
-          else return null
-        })
-        .catch(function(err) {
-          console.error(err)
-          return null
-        })
-    }
   }
 
   async function getSpeech(texts) {

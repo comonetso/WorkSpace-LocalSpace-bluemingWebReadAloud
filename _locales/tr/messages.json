@@ -1,9 +1,9 @@
 {
   "extension_name": {
-    "message": "Read Aloud: Bir Metni Sesli Okuyucu"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_short_name": {
-    "message": "Read Aloud"
+    "message": "Blueming Web Read Aloud"
   },
   "extension_description": {
     "message": "Geçerli web sayfası makalesini tek bir tıklatmayla, metin okuma (TTS) kullanarak yüksek sesle okuyun. 40'tan fazla dili destekler."
@@ -84,7 +84,7 @@
     "message": "Çıkış Yap"
   },
   "player_tab_explanation": {
-    "message": "Sesli Oku, ses çalmak için bu sekmeyi kullanır. Bu sekme, 5 dakika boyunca herhangi bir işlem yapılmadığında otomatik olarak kapanacaktır."
+    "message": "Blueming Web Read Aloud, ses çalmak için bu sekmeyi kullanır. Bu sekme, 5 dakika boyunca herhangi bir işlem yapılmadığında otomatik olarak kapanacaktır."
   },
   "player_hidethistab_link": {
     "message": "Bu sekmeyi gizle"
@@ -93,7 +93,7 @@
     "message": "Bu sekme gizlensin mi?"
   },
   "player_hidethistab_dialog_body": {
-    "message": "Bu sekmeyi gizlerseniz, Sesli Oku mevcut web sayfasında ses çalar. Bu, sayfadan ayrılmanın konuşmanın durmasına neden olacağı anlamına gelir. (Bu ayar, uzantı Seçenekleri sayfasından geri alınabilir)"
+    "message": "Bu sekmeyi gizlerseniz, Blueming Web Read Aloud mevcut web sayfasında ses çalar. Bu, sayfadan ayrılmanın konuşmanın durmasına neden olacağı anlamına gelir. (Bu ayar, uzantı Seçenekleri sayfasından geri alınabilir)"
   },
   "player_hidethistab_dialog_ok_button": {
     "message": "Saklamak"
@@ -105,7 +105,7 @@
     "message": "İzin İstendi"
   },
   "player_permission_dialog_body": {
-    "message": "Sesli Okuma&#39;nın ses çalmasına izin verilsin mi?"
+    "message": "Blueming Web Read Aloud&#39;un ses çalmasına izin verilsin mi?"
   },
   "player_permission_dialog_ok_button": {
     "message": "İzin vermek"
@@ -129,10 +129,10 @@
     "message": "Bu web sitesi sesli okunamıyor"
   },
   "error_file_access": {
-    "message": "[ayarlar](open-extension-settings) uzantısındaki dosya URL'lerine Sesli Okuma erişimi vermeniz gerekir"
+    "message": "[ayarlar](open-extension-settings) uzantısındaki dosya URL'lerine Blueming Web Read Aloud erişimi vermeniz gerekir"
   },
   "error_add_permissions": {
-    "message": "Bu web sitesi için Sesli Okuma ek [izinleri](request-permissions) vermeniz gerekiyor"
+    "message": "Bu web sitesi için Blueming Web Read Aloud ek [izinleri](request-permissions) vermeniz gerekiyor"
   },
   "error_login_required": {
     "message": "Premium Sesleri kullanmak için lütfen [oturum açın](sign-in)"
@@ -153,12 +153,12 @@
     "message": "Seçeneklere Geri Dön"
   },
   "google_translate_request_permission": {
-    "message": "Read Aloud, metini okumak için Google Çeviri'yi kullanmak istiyor."
+    "message": "Blueming Web Read Aloud, metini okumak için Google Çeviri'yi kullanmak istiyor."
   },
   "google_translate_allow_button": {
     "message": "İzin ver"
   },
   "google_translate_keep_page_open": {
-    "message": "Read Aloud, metinden seslendirme için Google Çeviri'yi kullanıyor. Lütfen bu sekmeyi açık tutun."
+    "message": "Blueming Web Read Aloud, metinden seslendirme için Google Çeviri'yi kullanıyor. Lütfen bu sekmeyi açık tutun."
   }
 }
