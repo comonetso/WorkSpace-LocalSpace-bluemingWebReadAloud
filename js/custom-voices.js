@@ -40,20 +40,20 @@ function obfuscate(key) {
 
 //status lines — engine names are brand names and stay as they are
 function enabledText(engine) {
-  return brapi.i18n.getMessage("customvoices_enabled", [engine]);
+  return getMessage("customvoices_enabled", [engine]);
 }
 
 function disabledText(engine) {
-  return brapi.i18n.getMessage("customvoices_disabled", [engine]);
+  return getMessage("customvoices_disabled", [engine]);
 }
 
 //the error from the test (often the service's own message) goes after the translated prefix
 function testFailedText(err) {
-  return brapi.i18n.getMessage("customvoices_test_failed", [String(err.message)]);
+  return getMessage("customvoices_test_failed", [String(err.message)]);
 }
 
 function missingFieldsText() {
-  return brapi.i18n.getMessage("customvoices_missing_fields");
+  return getMessage("customvoices_missing_fields");
 }
 
 
@@ -165,7 +165,7 @@ function ibmSave() {
 function testIbm(apiKey, url) {
   return brapi.permissions.request({origins: [url + "/*"]})
     .then(function(granted) {
-      if (!granted) throw new Error(brapi.i18n.getMessage("customvoices_error_permission"));
+      if (!granted) throw new Error(getMessage("customvoices_error_permission"));
     })
     .then(function() {
       return ibmWatsonTtsEngine.fetchVoices(apiKey, url);
@@ -239,7 +239,7 @@ async function clovaSave() {
 
 async function testClova(clientId, clientSecret, apiUrl) {
   // 파라미터 확인
-  if (!apiUrl) throw new Error(brapi.i18n.getMessage("customvoices_error_invalid_url"))
+  if (!apiUrl) throw new Error(getMessage("customvoices_error_invalid_url"))
   if (!clientId || !clientSecret) throw new Error(missingFieldsText())
 
   // API URL이 /tts로 끝나지 않으면 추가
@@ -272,7 +272,7 @@ async function testClova(clientId, clientSecret, apiUrl) {
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => "");
-      throw new Error(brapi.i18n.getMessage("customvoices_error_api", [String(res.status), errorText]));
+      throw new Error(getMessage("customvoices_error_api", [String(res.status), errorText]));
     }
 
     // 응답 확인 (blob 타입이어야 함)

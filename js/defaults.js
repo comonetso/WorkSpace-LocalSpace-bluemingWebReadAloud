@@ -123,7 +123,7 @@ function updateSettings(items) {
 //of each voice ("rate" + voiceName) included — not the API credentials, nor the caches
 function clearSettings(names) {
   var keys = names ? Promise.resolve(names) : brapi.storage.local.get(null).then(function(items) {
-    return ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip"]
+    return ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip", "uiLanguage"]
       .concat(Object.keys(items).filter(function(key) { return /^rate./.test(key) }))
   })
   return keys.then(function(keys) {
@@ -439,7 +439,7 @@ function assert(truthy, message) {
 }
 
 function formatError(err) {
-  var message = brapi.i18n && brapi.i18n.getMessage(err.code) || err.code;
+  var message = brapi.i18n && getMessage(err.code) || err.code;
   if (message) {
     message = message
       .replace(/{(\w+)}/g, function(m, p1) {return err[p1]})
@@ -460,7 +460,7 @@ function ajaxGet(sUrl) {
   return fetch(opts.url, {headers: opts.headers})
     .then(res => {
       //shown on the options and custom voices pages (a voice test, a key check): in the browser's language
-      if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
+      if (!res.ok) throw new Error(getMessage("error_server_status", [String(res.status)]))
       switch (opts.responseType) {
         case "json": return res.json()
         case "blob": return res.blob()
@@ -478,7 +478,7 @@ function ajaxPost(sUrl, oData, sType) {
       body: sType == "json" ? JSON.stringify(oData) : urlEncode(oData)
     })
     .then(res => {
-      if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
+      if (!res.ok) throw new Error(getMessage("error_server_status", [String(res.status)]))
       return res.text()
     })
 }
@@ -523,19 +523,68 @@ function domReady() {
   })
 }
 
-//the page's words in the browser's language (_locales): data-i18n="key" for an element's text (an input's
+//the language of the extension's pages and messages: uiLanguage chosen in the options ("en" / "ko"), else the
+//browser's (chrome.i18n). Only the extension's own pages and service worker read _locales; on a web page (the
+//content scripts) it's the browser's — the page bar and selection button ask the service worker (getUiMessages)
+var uiMessages = null
+var uiLanguageReady = loadUiLanguage()
+if (isExtensionPage()) {
+  brapi.storage.onChanged.addListener(function(changes) {
+    if (changes.uiLanguage) uiLanguageReady = loadUiLanguage()
+  })
+}
+
+function isExtensionPage() {
+  try {
+    return location.origin == new URL(brapi.runtime.getURL("")).origin
+  }
+  catch (err) {
+    return false
+  }
+}
+
+function loadUiLanguage() {
+  if (!isExtensionPage()) return Promise.resolve()
+  return getSettings(["uiLanguage"])
+    .then(function(settings) {
+      var lang = settings.uiLanguage
+      if (lang != "en" && lang != "ko") return null
+      return fetch(brapi.runtime.getURL("_locales/" + lang + "/messages.json")).then(function(res) { return res.json() })
+    })
+    .then(function(messages) {
+      uiMessages = messages
+    })
+    .catch(function(err) {
+      console.error(err)
+      uiMessages = null
+    })
+}
+
+//chrome.i18n.getMessage in the language chosen in the options: $1-$9 the substitutions, $$ a dollar sign
+function getMessage(key, substitutions) {
+  var entry = uiMessages && uiMessages[key]
+  if (!entry) return brapi.i18n ? brapi.i18n.getMessage(key, substitutions) : ""
+  var subs = substitutions == null ? [] : [].concat(substitutions)
+  return entry.message.replace(/\$(\$|[1-9])/g, function(all, c) {
+    return c == "$" ? "$" : subs[c - 1] == null ? "" : String(subs[c - 1])
+  })
+}
+
+//the page's words (getMessage), once the language is loaded: data-i18n="key" for an element's text (an input's
 //value, the page's <title>), data-i18n-placeholder / data-i18n-title / data-i18n-aria-label for those attributes
 function setI18nText() {
-  $("[data-i18n]").each(function() {
-    var key = $(this).data("i18n");
-    var text = brapi.i18n.getMessage(key);
-    if ($(this).is("input")) $(this).val(text);
-    else $(this).text(text);
-  })
-  var attributes = ["placeholder", "title", "aria-label"]
-  attributes.forEach(function(attr) {
-    $("[data-i18n-" + attr + "]").each(function() {
-      this.setAttribute(attr, brapi.i18n.getMessage(this.getAttribute("data-i18n-" + attr)));
+  return uiLanguageReady.then(function() {
+    $("[data-i18n]").each(function() {
+      var key = $(this).data("i18n");
+      var text = getMessage(key);
+      if ($(this).is("input")) $(this).val(text);
+      else $(this).text(text);
+    })
+    var attributes = ["placeholder", "title", "aria-label"]
+    attributes.forEach(function(attr) {
+      $("[data-i18n-" + attr + "]").each(function() {
+        this.setAttribute(attr, getMessage(this.getAttribute("data-i18n-" + attr)));
+      })
     })
   })
 }

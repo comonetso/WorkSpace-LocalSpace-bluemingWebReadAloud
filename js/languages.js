@@ -181,7 +181,7 @@ domReady().then(() => {
 
 rxjs.combineLatest(
   voices$,
-  domReady()
+  domReady().then(() => uiLanguageReady)
 ).subscribe(async ([voices]) => {
   const [settings, acceptLangs] = await Promise.all([
     getSettings(["languages", "preferredVoices"]),
@@ -236,7 +236,7 @@ function createCheckboxes(voices) {
     div = $("<div>").addClass("form-check voice-list").attr("data-lang", item.code).appendTo("#lang-list");
     label = $("<label>").addClass("form-check-label d-block").appendTo(div);
     $("<input>").attr("type", "radio").attr("name", item.code).appendTo(label);
-    $("<span>").text(brapi.i18n.getMessage("languages_auto_select")).appendTo(label);
+    $("<span>").text(getMessage("languages_auto_select")).appendTo(label);
     for (var voice of voicesForLang[item.code]) {
       label = $("<label>").addClass("form-check-label d-block").appendTo(div);
       $("<input>").attr("type", "radio").attr("name", item.code).attr("data-voice", voice.voiceName).appendTo(label);

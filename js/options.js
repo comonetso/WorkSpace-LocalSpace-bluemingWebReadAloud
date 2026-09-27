@@ -7,6 +7,16 @@
   domReadyPromise
     .then(setI18nText)
 
+  //the browser's options dialog takes this page's height in whole pixels, so a page a fraction of a pixel taller
+  //(fonts and em sizes: 565.26px) got a scroll bar: its height is rounded up, again whenever it changes
+  domReadyPromise
+    .then(() => {
+      const content = document.querySelector(".container-fluid")
+      new ResizeObserver(() => {
+        document.body.style.minHeight = Math.ceil(content.getBoundingClientRect().height) + "px"
+      }).observe(content)
+    })
+
 
 
   //close button
@@ -52,7 +62,8 @@
     voices$,
     observeSetting("languages"),
     brapi.i18n.getAcceptLanguages().catch(err => { console.error(err); return [] }),
-    domReadyPromise
+    //the words of the language chosen in the options are loaded first (js/defaults.js getMessage)
+    domReadyPromise.then(() => uiLanguageReady)
   ]).pipe(
     rxjs.tap(([voices, languages, acceptLangs]) => populateVoices(voices, { languages }, acceptLangs)),
     rxjs.share()
@@ -221,6 +232,29 @@
 
 
 
+  //uiLanguage: the language of the extension's pages, "en" / "ko", none for the browser's (getMessage in
+  //js/defaults.js; asked for 2026-09-28). This page is drawn again in it, whichever page or the reset changed it
+  domReadyPromise
+    .then(() => {
+      $("#ui-language")
+        .change(function () {
+          const lang = $(this).val()
+          const saved = lang ? updateSettings({ uiLanguage: lang }) : clearSettings(["uiLanguage"])
+          saved.catch(console.error)
+        })
+    })
+
+  rxjs.combineLatest([observeSetting("uiLanguage"), domReadyPromise])
+    .subscribe(([uiLanguage]) => {
+      $("#ui-language").val(uiLanguage == "en" || uiLanguage == "ko" ? uiLanguage : "")
+    })
+
+  brapi.storage.onChanged.addListener(changes => {
+    if (changes.uiLanguage) location.reload()
+  })
+
+
+
   //fixBtSilenceGap: plays a silent track so a Bluetooth headset doesn't cut the first words of each
   //paragraph (js/content.js). Moved here from the old advanced options page, same setting
   domReadyPromise
@@ -310,7 +344,7 @@
     $("#voices").empty()
     $("<option>")
       .val("")
-      .text(brapi.i18n.getMessage("options_voice_auto_select"))
+      .text(getMessage("options_voice_auto_select"))
       .appendTo("#voices")
 
     //get voices filtered by selected languages
@@ -340,7 +374,7 @@
 
     //create the offline optgroup
     const offline = $("<optgroup>")
-      .attr("label", brapi.i18n.getMessage("options_voicegroup_offline"))
+      .attr("label", getMessage("options_voicegroup_offline"))
       .appendTo($("#voices"))
     for (const voice of groups.offline) {
       $("<option>")
@@ -352,13 +386,13 @@
     //create the standard optgroup (every voice that isn't offline: online, free or paid)
     $("<optgroup>").appendTo($("#voices"))
     var standard = $("<optgroup>")
-      .attr("label", brapi.i18n.getMessage("options_voicegroup_standard"))
+      .attr("label", getMessage("options_voicegroup_standard"))
       .appendTo($("#voices"));
     groups.standard.forEach(function (voice) {
       //the voice's name is its saved value (voiceName), so only the gender mark after it is translated
       var displayName = voice.voiceName
       if (voice.lang === "ko-KR" && voice.gender) {
-        displayName = voice.voiceName + " (" + brapi.i18n.getMessage(voice.gender === "female" ? "options_voice_female" : "options_voice_male") + ")"
+        displayName = voice.voiceName + " (" + getMessage(voice.gender === "female" ? "options_voice_female" : "options_voice_male") + ")"
       }
       $("<option>")
         .val(voice.voiceName)
@@ -369,15 +403,15 @@
     //create the additional optgroup
     $("<optgroup>").appendTo($("#voices"));
     var additional = $("<optgroup>")
-      .attr("label", brapi.i18n.getMessage("options_voicegroup_additional"))
+      .attr("label", getMessage("options_voicegroup_additional"))
       .appendTo($("#voices"));
     $("<option>")
       .val("@languages")
-      .text(brapi.i18n.getMessage("options_add_more_languages"))
+      .text(getMessage("options_add_more_languages"))
       .appendTo(additional)
     $("<option>")
       .val("@custom")
-      .text(brapi.i18n.getMessage("options_enable_custom_voices"))
+      .text(getMessage("options_enable_custom_voices"))
       .appendTo(additional)
   }
 

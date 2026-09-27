@@ -144,7 +144,7 @@ function TimeoutTtsEngine(baseEngine, startTimeout, endTimeout) {
           console.debug(`No 'start' event after ${startTimeout}, will call stop() and retry once`)
           baseEngine.stop()
           //shown on the options page's voice test (and the popup): in the browser's language
-          return rxjs.throwError(() => new Error(brapi.i18n.getMessage("error_tts_not_started")))
+          return rxjs.throwError(() => new Error(getMessage("error_tts_not_started")))
         }
       }),
       rxjs.retry(1),
@@ -1048,7 +1048,7 @@ function AzureTtsEngine() {
       }
     })
     //shown on the custom voices page's key check
-    if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
+    if (!res.ok) throw new Error(getMessage("error_server_status", [String(res.status)]))
     const voices = await res.json()
     return voices.map(item => {
       const name = item.ShortName.split("-")[2]
@@ -1073,7 +1073,7 @@ function AzureTtsEngine() {
       },
       body: `<speak version='1.0' xml:lang='${lang}'><voice name='${voiceName}'>${escapeXml(text)}</voice></speak>`
     })
-    if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
+    if (!res.ok) throw new Error(getMessage("error_server_status", [String(res.status)]))
     const blob = await res.blob()
     return URL.createObjectURL(blob)
   }

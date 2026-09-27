@@ -182,6 +182,12 @@
   "options_icon_popup_on": {
     "message": "켜기"
   },
+  "options_ui_language": {
+    "message": "화면 언어"
+  },
+  "options_ui_language_auto": {
+    "message": "자동 (브라우저 언어)"
+  },
   "command_play": {
     "message": "재생 / 일시정지"
   },

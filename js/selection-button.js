@@ -170,6 +170,15 @@
     dot.type = "button"
     dot.title = message("selection_button_title", "Read the selected text")
     dot.setAttribute("aria-label", dot.title)
+    //in the language chosen in the options, once the service worker has told it (a web page can't read _locales)
+    brapi.runtime.sendMessage({dest: "serviceWorker", method: "getUiMessages", args: []})
+      .then(messages => {
+        const entry = messages && !messages.error && messages.selection_button_title
+        if (!entry) return
+        dot.title = entry.message
+        dot.setAttribute("aria-label", dot.title)
+      })
+      .catch(() => {})
     //pressing it must not clear the selection, and the page shouldn't react to it
     for (const type of ["pointerdown", "mousedown"]) {
       dot.addEventListener(type, event => {

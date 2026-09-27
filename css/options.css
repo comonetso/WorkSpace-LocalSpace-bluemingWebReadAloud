@@ -58,13 +58,15 @@ small {
   font-weight: 400;
 }
 
+/*gaps kept small so the page fits the browser's options dialog without a scroll bar: its height stops at
+640px or 90% of the window, header included (2026-09-28, with the display language row added)*/
 .layout {
-  margin-top: 1rem;
-  min-width: 600px;
+  margin-top: .5rem;
+  min-width: 730px; /*the longest English label and voice name side by side (measured 2026-09-28)*/
   display: grid;
   grid-template-columns: auto auto;
   grid-template-rows: auto auto auto auto;
-  grid-gap: 10px 30px;
+  grid-gap: 6px 30px;
   align-items: center;
 }
 
@@ -189,7 +191,7 @@ input[type=checkbox] + label {
 }
 
 .buttons {
-  margin-top: 1.5em;
+  margin-top: 1em;
 }
 
 #rate-input-div {

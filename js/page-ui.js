@@ -547,6 +547,7 @@
 
   function startBar(sessionId) {
     removeBar()
+    askUiMessages()
     const port = brapi.runtime.connect({name: PORT_NAME})
     const host = document.createElement("readaloud-hrg-bar")
     host.className = "no-read-aloud"
@@ -781,9 +782,22 @@
     return pad(Math.floor(sec / 3600)) + ":" + pad(Math.floor(sec / 60) % 60) + ":" + pad(sec % 60)
   }
 
+  //the words of the language chosen in the options, which the service worker reads (a web page can't read
+  //_locales), asked for as each reading starts; until they come, or with none chosen, the browser's
+  let uiMessages = null
+  function askUiMessages() {
+    try {
+      brapi.runtime.sendMessage({dest: "serviceWorker", method: "getUiMessages", args: []})
+        .then(messages => { uiMessages = messages && !messages.error ? messages : null })
+        .catch(() => {})
+    }
+    catch (err) {}
+  }
+
   function message(name, fallback) {
     try {
-      return brapi.i18n.getMessage(name) || fallback
+      const entry = uiMessages && uiMessages[name]
+      return entry ? entry.message : brapi.i18n.getMessage(name) || fallback
     }
     catch (err) {
       return fallback

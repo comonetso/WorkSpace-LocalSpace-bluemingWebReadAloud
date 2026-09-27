@@ -182,6 +182,12 @@
   "options_icon_popup_on": {
     "message": "On"
   },
+  "options_ui_language": {
+    "message": "Display language"
+  },
+  "options_ui_language_auto": {
+    "message": "Automatic (browser language)"
+  },
   "command_play": {
     "message": "Play / pause"
   },

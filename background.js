@@ -69,7 +69,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
 
           // 옵션 페이지 음성 테스트(와 팝업)에 뜨는 문구라 브라우저 언어로
-          sendResponse({ success: false, error: chrome.i18n.getMessage("error_clova_api", [String(res.status), errorDetails]) });
+          sendResponse({ success: false, error: getMessage("error_clova_api", [String(res.status), errorDetails]) });
           return;
         }
 

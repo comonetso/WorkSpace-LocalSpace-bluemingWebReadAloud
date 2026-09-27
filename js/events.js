@@ -15,6 +15,9 @@ syncIconPopup()
 
 brapi.storage.onChanged.addListener(function(changes) {
   if (changes.iconOpensPopup) syncIconPopup()
+  //the right-click menu speaks the language chosen in the options (js/defaults.js getMessage, whose own
+  //listener, added first, has started loading it)
+  if (changes.uiLanguage) uiLanguageReady.then(retitleContextMenus)
 })
 
 async function syncIconPopup() {
@@ -69,6 +72,9 @@ var handlers = {
   rewind: rewind,
   seek: seek,
   authWavenet: authWavenet,
+  //the words of the language chosen in the options, for the page bar and selection button, which can't read
+  //_locales on a web page; null: the browser's
+  getUiMessages: () => uiLanguageReady.then(() => uiMessages),
 }
 
 registerMessageListener("serviceWorker", handlers)
@@ -161,15 +167,23 @@ async function syncSelectionButton(injectOpenTabs) {
 
 function installContextMenus() {
   if (brapi.contextMenus)
-  brapi.contextMenus.create({
-    id: "read-selection",
-    title: brapi.i18n.getMessage("context_read_selection"),
-    contexts: ["selection"]
-  },
-  function() {
-    if (brapi.runtime.lastError) console.error(brapi.runtime.lastError)
-    else console.info("Installed context menus")
+  uiLanguageReady.then(function() {
+    brapi.contextMenus.create({
+      id: "read-selection",
+      title: getMessage("context_read_selection"),
+      contexts: ["selection"]
+    },
+    function() {
+      if (brapi.runtime.lastError) console.error(brapi.runtime.lastError)
+      else console.info("Installed context menus")
+    })
   })
+}
+
+function retitleContextMenus() {
+  if (brapi.contextMenus)
+  brapi.contextMenus.update("read-selection", {title: getMessage("context_read_selection")})
+    .catch(console.error)
 }
 
 
@@ -540,7 +554,7 @@ function authWavenet() {
             elem.textContent = text
             document.body.appendChild(elem)
           },
-          args: [brapi.i18n.getMessage("events_wavenet_auth_instructions")],
+          args: [getMessage("events_wavenet_auth_instructions")],
         })
       }
       function showSuccess() {
@@ -551,7 +565,7 @@ function authWavenet() {
             elem.style.backgroundColor = '#0d0'
             elem.textContent = text
           },
-          args: [brapi.i18n.getMessage("events_wavenet_auth_success")],
+          args: [getMessage("events_wavenet_auth_success")],
         })
       }
     })
