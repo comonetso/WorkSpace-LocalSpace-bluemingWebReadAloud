@@ -46,6 +46,7 @@ clova-api-test.html
 clova-proxy-test.html
 test-cors-bypass.js
 clova_tts_output.mp3
+.env
 
 # Editor settings
 .vscode/
