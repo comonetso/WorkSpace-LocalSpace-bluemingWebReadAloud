@@ -162,6 +162,13 @@ function makeSpokenText(text, lang, words) {
   function capitals(str, at) {
     return {text: str.toUpperCase(), src: keep(str, at).src}
   }
+  //two letters spelled out, given apart to a Korean voice (VS → "V S"): Google's Korean voices read some as a
+  //word (VS as 대, "versus" — "VS Code" came out "대 코드"). Chosen by ear 2026-09-28
+  function spelled(str, at) {
+    const up = capitals(str, at)
+    if (signs != SPOKEN_SIGNS.ko || str.length != 2) return up
+    return join([{text: up.text[0], src: [at]}, inserted(" ", at + 1), {text: up.text[1], src: [at + 1]}])
+  }
   //an inserted word or space, taken as coming from the char at "at"
   function inserted(str, at) {
     return {text: str, src: Array.from({length: str.length}, () => at)}
@@ -230,8 +237,19 @@ function makeSpokenText(text, lang, words) {
     const pieces = []
     for (let k = 0; k < lead.length; k++) pieces.push(inserted(signs[lead[k]] + " ", at + k))
     for (const run of runs) {
-      pieces.push(run.single ? speakWord(run.text, run.at, true, capitalName || inCapitalRun) : keep(run.text, run.at))
+      pieces.push(run.single ? speakWord(run.text, run.at, true, capitalName || inCapitalRun) : keptRun(run.text, run.at))
       if (run.sign) pieces.push(inserted(" " + signs[run.sign] + " ", run.at + run.text.length))
+    }
+    return join(pieces)
+  }
+
+  //parts joined by signs not said (UI/UX, TCP/IP, GPT-4) are left to the voice, but for parts of two capitals,
+  //spelled like any other (spelled)
+  function keptRun(run, at) {
+    const pieces = []
+    for (const part of run.split(/([._\-\/])/)) {
+      pieces.push(/^[A-Z]{2}$/.test(part) ? spelled(part, at) : keep(part, at))
+      at += part.length
     }
     return join(pieces)
   }
@@ -244,6 +262,8 @@ function makeSpokenText(text, lang, words) {
     //an abbreviation in the plural (APIs, READMEs): the abbreviation, then its s
     const plural = /^([A-Z]{2,})s$/.exec(word)
     if (plural) {
+      //one of two letters (PCs, IDs) is left to the voice as it was
+      if (plural[1].length <= 2) return keep(word, at)
       const stem = speakCapitals(plural[1], at, inCapitalRun)
       return stem.text == plural[1] ? keep(word, at) : join([stem, keep("s", at + plural[1].length)])
     }
@@ -285,7 +305,7 @@ function makeSpokenText(text, lang, words) {
     if (part.length <= 2) {
       if (SPOKEN_CODE_SHORT_WORDS.has(lower)) return keep(part, at)
       //spelled (ui, js), but in camel case it may be the start of a word (PyTorch, LoRA, kHz)
-      return inCamel ? null : capitals(part, at)
+      return inCamel ? null : spelled(part, at)
     }
     //no vowel: can't be read as a word (css, npm, Http)
     if (!/[aeiouy]/.test(lower)) return capitals(part, at)
@@ -296,7 +316,7 @@ function makeSpokenText(text, lang, words) {
   function speakCapitals(word, at, inCapitalRun) {
     const lower = word.toLowerCase()
     //spelled, but for short words among words in capitals (DO in "DO NOT EDIT")
-    if (word.length <= 2) return inCapitalRun && SPOKEN_SHORT_WORDS.has(lower) ? lowered(word, at) : keep(word, at)
+    if (word.length <= 2) return inCapitalRun && SPOKEN_SHORT_WORDS.has(lower) ? lowered(word, at) : spelled(word, at)
     //words without a vowel are sounds (ssh, hmm): in capitals it's an abbreviation (SSH)
     if (!/[aeiouy]/.test(lower)) return keep(word, at)
     if (words.has(lower)) return lowered(word, at)
