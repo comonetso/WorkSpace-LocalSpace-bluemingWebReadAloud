@@ -427,41 +427,118 @@
   }
 
   //scroll so the whole paragraph being read is visible — its last line included, which the
-  //playback bar at the bottom would otherwise cover
+  //playback bar at the bottom, or what the page floats over it (a chat's message box), would otherwise
+  //cover. Each box that scrolls it is moved in turn, from the innermost out to the window, as far as that
+  //box can go, the paragraph measured again after each: the nearest box alone may hardly move (a table or
+  //code box that scrolls sideways) or be out of view.
+  //It jumps there: a smooth scroll may be held back or cut off by the page (ChatGPT's conversation started
+  //one 0.5-1.2s late or not at all, 2026-09-27)
   function revealRanges(ranges) {
-    let rect = null
-    for (const range of ranges) {
-      const b = range.getBoundingClientRect()
-      if (!b || (b.width == 0 && b.height == 0)) continue
-      rect = rect ? {top: Math.min(rect.top, b.top), bottom: Math.max(rect.bottom, b.bottom)} : {top: b.top, bottom: b.bottom}
+    const measure = () => {
+      let rect = null
+      for (const range of ranges) {
+        const b = range.getBoundingClientRect()
+        if (!b || (b.width == 0 && b.height == 0)) continue
+        rect = rect ? {top: Math.min(rect.top, b.top), bottom: Math.max(rect.bottom, b.bottom)} : {top: b.top, bottom: b.bottom}
+      }
+      return rect
     }
+    let rect = measure()
     if (!rect) return
-    const container = scrollableAncestor(ranges[0].startContainer.parentElement)
-    const view = container ? container.getBoundingClientRect() : {top: 0, bottom: window.innerHeight, height: window.innerHeight}
     //the bar lives in the top frame: a subframe (e.g. a blog whose article is a full-page iframe)
     //can't see it, so it counts the bar's height at the bottom as covered
     const barTop = bar ? bar.host.getBoundingClientRect().top
       : window.top !== window ? window.innerHeight - BAR_HEIGHT
       : Infinity
-    const visibleTop = view.top
-    const visibleBottom = Math.min(view.bottom, window.innerHeight, barTop)
-    if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return
-    const height = rect.bottom - rect.top
-    const visible = visibleBottom - visibleTop
-    //centered when it fits; a paragraph taller than the view starts at the top instead
-    const delta = height <= visible
-      ? rect.top - (visibleTop + (visible - height) / 2)
-      : rect.top - visibleTop
-    if (container) container.scrollBy({top: delta, behavior: "smooth"})
-    else window.scrollBy({top: delta, behavior: "smooth"})
+    const boxes = scrollingBoxes(ranges[0].startContainer.parentElement)
+    const screen = uncovered(ranges, boxes, 0, Math.min(window.innerHeight, barTop))
+    for (const box of [...boxes, null]) {
+      let visibleTop = screen.top, visibleBottom = screen.bottom
+      if (box) {
+        const boxTop = box.getBoundingClientRect().top + box.clientTop
+        const boxBottom = boxTop + box.clientHeight
+        //the part of the box on screen; the whole box when none is (a box further out brings it in)
+        visibleTop = Math.max(boxTop, screen.top)
+        visibleBottom = Math.min(boxBottom, screen.bottom)
+        if (visibleBottom <= visibleTop) {
+          visibleTop = boxTop
+          visibleBottom = boxBottom
+        }
+      }
+      if (rect.top >= visibleTop && rect.bottom <= visibleBottom) continue
+      const height = rect.bottom - rect.top
+      const visible = visibleBottom - visibleTop
+      //centered when it fits; a paragraph taller than the view starts at the top instead
+      const wanted = height <= visible
+        ? rect.top - (visibleTop + (visible - height) / 2)
+        : rect.top - visibleTop
+      const room = scrollRoom(box)
+      const delta = Math.max(room.up, Math.min(room.down, wanted))
+      if (Math.abs(delta) < 1) continue
+      if (box) box.scrollBy({top: delta, behavior: "instant"})
+      else window.scrollBy({top: delta, behavior: "instant"})
+      rect = measure()
+      if (!rect) return
+    }
   }
 
-  function scrollableAncestor(elem) {
+  //[top, bottom] of the screen, less what the page floats over a line of the ranges that's on screen and not
+  //cut off by a box it scrolls in: the nearest positioned (absolute, fixed, sticky) element over the line's
+  //middle, not holding the ranges. Below the middle of what's left it takes the bottom, above it the top.
+  //As it was if nothing would be left
+  function uncovered(ranges, boxes, top, bottom) {
+    const own = ranges.map(range => {
+      const node = range.commonAncestorContainer
+      return node.nodeType == Node.ELEMENT_NODE ? node : node.parentElement
+    }).filter(Boolean)
+    const ownOf = el => own.some(o => o.contains(el) || el.contains(o))
+    const shown = boxes.map(box => {
+      const boxTop = box.getBoundingClientRect().top + box.clientTop
+      return {top: boxTop, bottom: boxTop + box.clientHeight}
+    })
+    let coverTop = top, coverBottom = bottom
+    for (const range of ranges) {
+      for (const line of range.getClientRects()) {
+        const x = (line.left + line.right) / 2, y = (line.top + line.bottom) / 2
+        if (!line.width || y < coverTop || y > coverBottom || x < 0 || x >= window.innerWidth) continue
+        if (shown.some(s => y < s.top || y > s.bottom)) continue
+        const hit = document.elementFromPoint(x, y)
+        if (!hit || ownOf(hit)) continue
+        let cover = null
+        for (let el = hit; el && !cover; el = el.parentElement) {
+          if (/^(absolute|fixed|sticky)$/.test(getComputedStyle(el).position)) cover = el
+        }
+        if (!cover || own.some(o => cover.contains(o))) continue
+        const c = cover.getBoundingClientRect()
+        if ((c.top + c.bottom) / 2 > (coverTop + coverBottom) / 2) coverBottom = Math.min(coverBottom, c.top)
+        else coverTop = Math.max(coverTop, c.bottom)
+      }
+    }
+    return coverBottom > coverTop ? {top: coverTop, bottom: coverBottom} : {top, bottom}
+  }
+
+  //how far box (null: the page) can scroll from where it is: up (<= 0) and down (>= 0). A box laid out
+  //bottom up (column-reverse, as in a chat) has its scrollTop 0 at the bottom and below 0 above
+  function scrollRoom(box) {
+    if (!box) {
+      const page = document.scrollingElement || document.documentElement
+      return {up: -window.scrollY, down: page.scrollHeight - window.innerHeight - window.scrollY}
+    }
+    const most = box.scrollHeight - box.clientHeight
+    const bottomUp = box.scrollTop < 0 || getComputedStyle(box).flexDirection == "column-reverse"
+    return bottomUp
+      ? {up: -most - box.scrollTop, down: -box.scrollTop}
+      : {up: -box.scrollTop, down: most - box.scrollTop}
+  }
+
+  //the boxes that scroll up and down with elem in them, innermost first (the page itself not included)
+  function scrollingBoxes(elem) {
+    const boxes = []
     for (let el = elem; el && el != document.body && el != document.documentElement; el = el.parentElement) {
       const overflowY = getComputedStyle(el).overflowY
-      if (/(auto|scroll|overlay)/.test(overflowY) && el.scrollHeight > el.clientHeight) return el
+      if (/(auto|scroll|overlay)/.test(overflowY) && el.scrollHeight > el.clientHeight) boxes.push(el)
     }
-    return null
+    return boxes
   }
 
 
