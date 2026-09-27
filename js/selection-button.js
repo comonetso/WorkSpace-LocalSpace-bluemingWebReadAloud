@@ -168,7 +168,7 @@
     shadow.adoptedStyleSheets = [sheet]
     const dot = document.createElement("button")
     dot.type = "button"
-    dot.title = message("selection_button_title", "선택한 글 읽기")
+    dot.title = message("selection_button_title", "Read the selected text")
     dot.setAttribute("aria-label", dot.title)
     //pressing it must not clear the selection, and the page shouldn't react to it
     for (const type of ["pointerdown", "mousedown"]) {

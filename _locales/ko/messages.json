@@ -1,4 +1,124 @@
 {
+  "extension_description": {
+    "message": "웹페이지를 소리 내어 읽어 줍니다. 한국어·영어에 맞춰 파일명·영어 단어도 자연스럽게 읽고, 네이버 클로바·구글 등 음성, 드래그 읽기, 원문 형광펜, 재생 바를 지원합니다."
+  },
+  "options_heading": {
+    "message": "설정"
+  },
+  "options_voice_label": {
+    "message": "음성"
+  },
+  "options_voicegroup_offline": {
+    "message": "오프라인 음성"
+  },
+  "options_voicegroup_standard": {
+    "message": "온라인 음성"
+  },
+  "options_voicegroup_additional": {
+    "message": "음성 관리"
+  },
+  "options_add_more_languages": {
+    "message": "언어 필터…"
+  },
+  "options_enable_custom_voices": {
+    "message": "API key로 음성 추가…"
+  },
+  "options_rate_label": {
+    "message": "속도"
+  },
+  "options_rate_warning": {
+    "message": "참고: 일부 음성은 빠른 속도에서 제대로 읽지 못할 수 있습니다."
+  },
+  "options_pitch_label": {
+    "message": "피치"
+  },
+  "options_volume_label": {
+    "message": "볼륨"
+  },
+  "options_show_highlighting": {
+    "message": "읽는 글 표시"
+  },
+  "options_highlighting_off": {
+    "message": "끄기"
+  },
+  "options_highlighting_popup": {
+    "message": "팝업에 표시"
+  },
+  "options_highlighting_window": {
+    "message": "별도 창에 표시"
+  },
+  "options_audio_playback": {
+    "message": "오디오 재생"
+  },
+  "options_audio_playback_standalone": {
+    "message": "별도 탭 사용"
+  },
+  "options_audio_playback_embedded": {
+    "message": "페이지 안에서"
+  },
+  "options_hotkeys_link": {
+    "message": "단축키 설정"
+  },
+  "options_test_button": {
+    "message": "미리 듣기"
+  },
+  "options_reset_button": {
+    "message": "초기화"
+  },
+  "player_tab_explanation": {
+    "message": "Blueming Web Read Aloud가 소리를 재생하는 탭입니다. 5분 동안 쓰지 않으면 저절로 닫힙니다."
+  },
+  "player_hidethistab_link": {
+    "message": "이 탭 숨기기"
+  },
+  "player_hidethistab_dialog_title": {
+    "message": "이 탭을 숨길까요?"
+  },
+  "player_hidethistab_dialog_body": {
+    "message": "이 탭을 숨기면 Blueming Web Read Aloud가 읽고 있는 웹페이지 안에서 소리를 재생합니다. 그래서 그 페이지를 떠나면 읽기가 멈춥니다.\n\n(이 설정은 확장 설정 페이지에서 되돌릴 수 있습니다)"
+  },
+  "player_hidethistab_dialog_ok_button": {
+    "message": "숨기기"
+  },
+  "player_hidethistab_dialog_cancel_button": {
+    "message": "취소"
+  },
+  "player_permission_dialog_title": {
+    "message": "권한 요청"
+  },
+  "player_permission_dialog_body": {
+    "message": "Blueming Web Read Aloud가 소리를 재생하도록 허용할까요?"
+  },
+  "player_permission_dialog_ok_button": {
+    "message": "허용"
+  },
+  "context_read_selection": {
+    "message": "선택한 글 읽기"
+  },
+  "error_no_text": {
+    "message": "읽을 글을 찾지 못했습니다. 읽을 부분을 먼저 선택해 보세요."
+  },
+  "error_no_voice": {
+    "message": "'{lang}' 언어를 읽을 음성이 없습니다"
+  },
+  "error_page_unreadable": {
+    "message": "이 사이트는 읽을 수 없습니다"
+  },
+  "error_file_access": {
+    "message": "확장 [설정](open-extension-settings)에서 파일 URL 접근을 허용해 주세요"
+  },
+  "error_add_permissions": {
+    "message": "이 사이트를 읽으려면 추가 [권한](request-permissions)이 필요합니다"
+  },
+  "error_wavenet_auth_required": {
+    "message": "구글 Wavenet 음성을 쓰려면 추가 [권한](auth-wavenet)이 필요합니다"
+  },
+  "error_chatgpt": {
+    "message": "각 답변 옆의 스피커 아이콘을 누르면 그 답변을 읽습니다"
+  },
+  "languages_heading": {
+    "message": "언어 필터"
+  },
   "pagebar_calculating": {
     "message": "계산 중"
   },
@@ -61,5 +181,182 @@
   },
   "options_icon_popup_on": {
     "message": "켜기"
+  },
+  "command_play": {
+    "message": "재생 / 일시정지"
+  },
+  "command_stop": {
+    "message": "정지"
+  },
+  "command_forward": {
+    "message": "다음 단락"
+  },
+  "command_rewind": {
+    "message": "이전 단락"
+  },
+  "options_page_title": {
+    "message": "Blueming Web Read Aloud 설정"
+  },
+  "options_close_button": {
+    "message": "닫기"
+  },
+  "options_wavenet_note": {
+    "message": "참고: 이 음성은 언제든 쓸 수 없게 될 수 있습니다."
+  },
+  "options_voice_auto_select": {
+    "message": "자동 선택"
+  },
+  "options_voice_female": {
+    "message": "여"
+  },
+  "options_voice_male": {
+    "message": "남"
+  },
+  "options_fix_bt_silence_gap": {
+    "message": "블루투스 헤드셋에서 단락 첫 몇 단어가 잘리는 문제 보정"
+  },
+  "customvoices_heading": {
+    "message": "음성 API key"
+  },
+  "customvoices_clova_desc": {
+    "message": "Naver Clova 자격 증명을 입력하면 Clova 음성을 쓸 수 있습니다"
+  },
+  "customvoices_aws_desc": {
+    "message": "AWS 자격 증명을 입력하면 Amazon Polly 음성을 쓸 수 있습니다"
+  },
+  "customvoices_gcp_desc": {
+    "message": "GCP API key를 입력하면 Google Wavenet 음성을 쓸 수 있습니다"
+  },
+  "customvoices_ibm_desc": {
+    "message": "IBM API key를 입력하면 IBM Watson 음성을 쓸 수 있습니다"
+  },
+  "customvoices_azure_desc": {
+    "message": "Azure 자격 증명을 입력하면 Microsoft Azure 음성을 쓸 수 있습니다"
+  },
+  "customvoices_openai_desc": {
+    "message": "OpenAI 또는 OpenAI 호환 음성 합성 API를 쓸 수 있습니다"
+  },
+  "customvoices_clova_client_id": {
+    "message": "Client ID"
+  },
+  "customvoices_clova_client_secret": {
+    "message": "Client Secret"
+  },
+  "customvoices_api_url": {
+    "message": "API URL"
+  },
+  "customvoices_aws_access_key_id": {
+    "message": "Access key ID"
+  },
+  "customvoices_aws_secret_access_key": {
+    "message": "Secret access key"
+  },
+  "customvoices_api_key": {
+    "message": "API key"
+  },
+  "customvoices_url": {
+    "message": "URL"
+  },
+  "customvoices_gcp_studio": {
+    "message": "Google Studio 음성도 포함 (주의: 비용 10배)"
+  },
+  "customvoices_save": {
+    "message": "저장"
+  },
+  "customvoices_add": {
+    "message": "추가"
+  },
+  "customvoices_edit": {
+    "message": "수정"
+  },
+  "customvoices_delete": {
+    "message": "삭제"
+  },
+  "customvoices_cancel": {
+    "message": "취소"
+  },
+  "customvoices_voice_list": {
+    "message": "음성 목록"
+  },
+  "customvoices_api_key_optional": {
+    "message": "API key (필요한 경우)"
+  },
+  "customvoices_enabled": {
+    "message": "$1 음성이 켜졌습니다."
+  },
+  "customvoices_disabled": {
+    "message": "$1 음성이 꺼졌습니다."
+  },
+  "customvoices_test_failed": {
+    "message": "테스트 실패: $1"
+  },
+  "customvoices_missing_fields": {
+    "message": "필수 항목이 비어 있습니다."
+  },
+  "customvoices_error_permission": {
+    "message": "권한이 허용되지 않았습니다"
+  },
+  "customvoices_error_invalid_url": {
+    "message": "API URL이 올바르지 않습니다"
+  },
+  "customvoices_error_api": {
+    "message": "API 오류 ($1): $2"
+  },
+  "player_dialog_close": {
+    "message": "닫기"
+  },
+  "events_wavenet_auth_instructions": {
+    "message": "파란색 SPEAK-IT 버튼을 누른 뒤 '로봇이 아닙니다' 체크박스를 체크하세요."
+  },
+  "events_wavenet_auth_success": {
+    "message": "인증되었습니다. 이제 Google Wavenet 음성을 쓸 수 있습니다. 이 탭은 닫아도 됩니다."
+  },
+  "error_server_status": {
+    "message": "서버 응답 오류 ($1)"
+  },
+  "error_tts_not_started": {
+    "message": "음성이 시작되지 않았습니다. 다른 음성을 골라 보세요."
+  },
+  "error_clova_api": {
+    "message": "API 오류: $1 - $2"
+  },
+  "popup_rewind": {
+    "message": "이전 단락"
+  },
+  "popup_loading": {
+    "message": "불러오는 중"
+  },
+  "popup_play": {
+    "message": "재생"
+  },
+  "popup_pause": {
+    "message": "일시정지"
+  },
+  "popup_stop": {
+    "message": "정지"
+  },
+  "popup_settings": {
+    "message": "설정"
+  },
+  "popup_forward": {
+    "message": "다음 단락"
+  },
+  "popup_font_smaller": {
+    "message": "글자 작게"
+  },
+  "popup_font_larger": {
+    "message": "글자 크게"
+  },
+  "popup_dark_mode": {
+    "message": "어두운 모드 켜기/끄기"
+  },
+  "popup_window_smaller": {
+    "message": "창 작게"
+  },
+  "popup_window_larger": {
+    "message": "창 크게"
+  },
+  "languages_auto_select": {
+    "message": "자동 선택"
   }
 }

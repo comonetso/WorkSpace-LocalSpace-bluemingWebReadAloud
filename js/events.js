@@ -521,10 +521,11 @@ function authWavenet() {
           showSuccess();
         }
       }
+      //the notices run inside Google's page: their text is looked up here and passed in
       function showInstructions() {
         return brapi.scripting.executeScript({
           target: {tabId: tab.id},
-          func: function() {
+          func: function(text) {
             var elem = document.createElement('DIV')
             elem.id = 'ra-notice'
             elem.style.position = 'fixed'
@@ -536,19 +537,21 @@ function authWavenet() {
             elem.style.fontSize = 'larger'
             elem.style.zIndex = 999000
             elem.style.textAlign = 'center'
-            elem.innerHTML = 'Please click the blue SPEAK-IT button, then check the I-AM-NOT-A-ROBOT checkbox.'
+            elem.textContent = text
             document.body.appendChild(elem)
-          }
+          },
+          args: [brapi.i18n.getMessage("events_wavenet_auth_instructions")],
         })
       }
       function showSuccess() {
         return brapi.scripting.executeScript({
           target: {tabId: tab.id},
-          func: function() {
+          func: function(text) {
             var elem = document.getElementById('ra-notice')
             elem.style.backgroundColor = '#0d0'
-            elem.innerHTML = 'Successful, you can now use Google Wavenet voices. You may close this tab.'
-          }
+            elem.textContent = text
+          },
+          args: [brapi.i18n.getMessage("events_wavenet_auth_success")],
         })
       }
     })

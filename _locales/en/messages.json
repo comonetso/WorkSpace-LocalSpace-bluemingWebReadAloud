@@ -1,12 +1,6 @@
 {
-  "extension_name": {
-    "message": "Blueming Web Read Aloud"
-  },
-  "extension_short_name": {
-    "message": "Blueming Web Read Aloud"
-  },
   "extension_description": {
-    "message": "Read aloud the current web-page article with one click, using text to speech (TTS). Supports 40+ languages."
+    "message": "Read web pages aloud, tuned for Korean and English: Naver Clova, Google and more voices, drag-to-read, highlighting, playback bar."
   },
   "options_heading": {
     "message": "Options"
@@ -17,26 +11,17 @@
   "options_voicegroup_offline": {
     "message": "Offline Voices"
   },
-  "options_voicegroup_piper": {
-    "message": "Piper Voices (experimental)"
-  },
   "options_voicegroup_standard": {
-    "message": "Standard Voices"
-  },
-  "options_voicegroup_premium": {
-    "message": "Premium Voices"
+    "message": "Online Voices"
   },
   "options_voicegroup_additional": {
-    "message": "Additional Voices"
+    "message": "Manage Voices"
   },
   "options_add_more_languages": {
-    "message": "Add More Languages"
+    "message": "Filter languages…"
   },
   "options_enable_custom_voices": {
-    "message": "Enable Custom Voices"
-  },
-  "options_enable_piper_voices": {
-    "message": "Manage Piper Voices"
+    "message": "Add voices with an API key…"
   },
   "options_rate_label": {
     "message": "Speed"
@@ -51,7 +36,7 @@
     "message": "Volume"
   },
   "options_show_highlighting": {
-    "message": "Text Highlighting"
+    "message": "Text being read"
   },
   "options_highlighting_off": {
     "message": "Turn off"
@@ -79,15 +64,6 @@
   },
   "options_reset_button": {
     "message": "Reset"
-  },
-  "options_logged_in_as": {
-    "message": "Logged in as"
-  },
-  "options_account_button": {
-    "message": "Account"
-  },
-  "options_logout_button": {
-    "message": "Logout"
   },
   "player_tab_explanation": {
     "message": "Blueming Web Read Aloud uses this tab for audio playback. This tab will automatically close after 5 minutes of no activity."
@@ -125,12 +101,6 @@
   "error_no_voice": {
     "message": "Language not supported '{lang}'"
   },
-  "error_upload_pdf": {
-    "message": "Please use the form to upload your PDF file to read aloud"
-  },
-  "error_ajax_pdf": {
-    "message": "Please save this PDF file to your computer and open it inside this [PDF viewer](open-pdf-viewer) to read aloud"
-  },
   "error_page_unreadable": {
     "message": "Cannot read aloud this website"
   },
@@ -140,41 +110,14 @@
   "error_add_permissions": {
     "message": "You need to grant Blueming Web Read Aloud additional [permissions](request-permissions) for this website"
   },
-  "error_login_required": {
-    "message": "Please [sign in](sign-in) to use the Premium Voices"
-  },
-  "error_voice_unavailable": {
-    "message": "Voice unavailable, please pick another"
-  },
-  "error_payment_required": {
-    "message": "Out of credits"
-  },
   "error_wavenet_auth_required": {
     "message": "You need to grant additional [permissions](auth-wavenet) to enable Google Wavenet voices"
-  },
-  "error_phone_not_connected": {
-    "message": "Phone not connected. [Connect](connect-phone)"
-  },
-  "error_phone_disconnected": {
-    "message": "Phone disconnected ({reason}). [Reconnect](connect-phone)"
   },
   "error_chatgpt": {
     "message": "Click the speaker icon next to each answer to read it aloud"
   },
   "languages_heading": {
-    "message": "Language Options"
-  },
-  "languages_back_button": {
-    "message": "Back to Options"
-  },
-  "google_translate_request_permission": {
-    "message": "Blueming Web Read Aloud would like to use Google Translate for text-to-speech."
-  },
-  "google_translate_allow_button": {
-    "message": "Allow"
-  },
-  "google_translate_keep_page_open": {
-    "message": "Blueming Web Read Aloud is using Google Translate for text-to-speech.  Please keep this tab open."
+    "message": "Language Filter"
   },
   "pagebar_calculating": {
     "message": "Calculating…"
@@ -238,5 +181,182 @@
   },
   "options_icon_popup_on": {
     "message": "On"
+  },
+  "command_play": {
+    "message": "Play / pause"
+  },
+  "command_stop": {
+    "message": "Stop"
+  },
+  "command_forward": {
+    "message": "Next paragraph"
+  },
+  "command_rewind": {
+    "message": "Previous paragraph"
+  },
+  "options_page_title": {
+    "message": "Blueming Web Read Aloud Options"
+  },
+  "options_close_button": {
+    "message": "Close"
+  },
+  "options_wavenet_note": {
+    "message": "Note: This voice may become unavailable at any time."
+  },
+  "options_voice_auto_select": {
+    "message": "Auto select"
+  },
+  "options_voice_female": {
+    "message": "female"
+  },
+  "options_voice_male": {
+    "message": "male"
+  },
+  "options_fix_bt_silence_gap": {
+    "message": "Fix missing first few words of each paragraph when using Bluetooth headset"
+  },
+  "customvoices_heading": {
+    "message": "Voice API Keys"
+  },
+  "customvoices_clova_desc": {
+    "message": "Enter Naver Clova credentials to enable Clova voices"
+  },
+  "customvoices_aws_desc": {
+    "message": "Enter AWS credentials to enable Amazon Polly voices"
+  },
+  "customvoices_gcp_desc": {
+    "message": "Enter GCP API key to enable Google Wavenet voices"
+  },
+  "customvoices_ibm_desc": {
+    "message": "Enter IBM API key to enable IBM Watson voices"
+  },
+  "customvoices_azure_desc": {
+    "message": "Enter Azure credentials to enable Microsoft Azure voices"
+  },
+  "customvoices_openai_desc": {
+    "message": "Use OpenAI or an OpenAI-compatible Speech endpoint"
+  },
+  "customvoices_clova_client_id": {
+    "message": "Client ID"
+  },
+  "customvoices_clova_client_secret": {
+    "message": "Client Secret"
+  },
+  "customvoices_api_url": {
+    "message": "API URL"
+  },
+  "customvoices_aws_access_key_id": {
+    "message": "Access key ID"
+  },
+  "customvoices_aws_secret_access_key": {
+    "message": "Secret access key"
+  },
+  "customvoices_api_key": {
+    "message": "API key"
+  },
+  "customvoices_url": {
+    "message": "URL"
+  },
+  "customvoices_gcp_studio": {
+    "message": "Include Google Studio voices. (WARNING: 10x cost)"
+  },
+  "customvoices_save": {
+    "message": "Save"
+  },
+  "customvoices_add": {
+    "message": "Add"
+  },
+  "customvoices_edit": {
+    "message": "Edit"
+  },
+  "customvoices_delete": {
+    "message": "Delete"
+  },
+  "customvoices_cancel": {
+    "message": "Cancel"
+  },
+  "customvoices_voice_list": {
+    "message": "Voice List"
+  },
+  "customvoices_api_key_optional": {
+    "message": "API key (if required)"
+  },
+  "customvoices_enabled": {
+    "message": "$1 voices are enabled."
+  },
+  "customvoices_disabled": {
+    "message": "$1 voices are disabled."
+  },
+  "customvoices_test_failed": {
+    "message": "Test failed: $1"
+  },
+  "customvoices_missing_fields": {
+    "message": "Missing required fields."
+  },
+  "customvoices_error_permission": {
+    "message": "Permission not granted"
+  },
+  "customvoices_error_invalid_url": {
+    "message": "Invalid API URL"
+  },
+  "customvoices_error_api": {
+    "message": "API Error ($1): $2"
+  },
+  "player_dialog_close": {
+    "message": "Close"
+  },
+  "events_wavenet_auth_instructions": {
+    "message": "Please click the blue SPEAK-IT button, then check the I-AM-NOT-A-ROBOT checkbox."
+  },
+  "events_wavenet_auth_success": {
+    "message": "Successful, you can now use Google Wavenet voices. You may close this tab."
+  },
+  "error_server_status": {
+    "message": "Server returns $1"
+  },
+  "error_tts_not_started": {
+    "message": "Timeout, TTS never started, try picking another voice?"
+  },
+  "error_clova_api": {
+    "message": "API Error: $1 - $2"
+  },
+  "popup_rewind": {
+    "message": "Previous paragraph"
+  },
+  "popup_loading": {
+    "message": "Loading"
+  },
+  "popup_play": {
+    "message": "Play"
+  },
+  "popup_pause": {
+    "message": "Pause"
+  },
+  "popup_stop": {
+    "message": "Stop"
+  },
+  "popup_settings": {
+    "message": "Settings"
+  },
+  "popup_forward": {
+    "message": "Next paragraph"
+  },
+  "popup_font_smaller": {
+    "message": "Smaller text"
+  },
+  "popup_font_larger": {
+    "message": "Larger text"
+  },
+  "popup_dark_mode": {
+    "message": "Dark mode on/off"
+  },
+  "popup_window_smaller": {
+    "message": "Smaller window"
+  },
+  "popup_window_larger": {
+    "message": "Larger window"
+  },
+  "languages_auto_select": {
+    "message": "Auto select"
   }
 }

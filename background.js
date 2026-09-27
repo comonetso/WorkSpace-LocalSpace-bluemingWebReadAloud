@@ -68,7 +68,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // JSON이 아닌 경우 원래 텍스트 사용
           }
 
-          sendResponse({ success: false, error: `API Error: ${res.status} - ${errorDetails}` });
+          // 옵션 페이지 음성 테스트(와 팝업)에 뜨는 문구라 브라우저 언어로
+          sendResponse({ success: false, error: chrome.i18n.getMessage("error_clova_api", [String(res.status), errorDetails]) });
           return;
         }
 

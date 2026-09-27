@@ -1,13 +1,6 @@
 (function () {
   const queryString = getQueryString()
   const domReadyPromise = domReady()
-  const playerCheckIn$ = new rxjs.Subject()
-
-  registerMessageListener("options", {
-    playerCheckIn() {
-      playerCheckIn$.next()
-    }
-  })
 
 
   //i18n
@@ -228,6 +221,24 @@
 
 
 
+  //fixBtSilenceGap: plays a silent track so a Bluetooth headset doesn't cut the first words of each
+  //paragraph (js/content.js). Moved here from the old advanced options page, same setting
+  domReadyPromise
+    .then(() => {
+      $("#fix-bt-silence-gap")
+        .change(function () {
+          updateSettings({ fixBtSilenceGap: this.checked })
+            .catch(console.error)
+        })
+    })
+
+  rxjs.combineLatest([observeSetting("fixBtSilenceGap"), domReadyPromise])
+    .subscribe(([fixBtSilenceGap]) => {
+      $("#fix-bt-silence-gap").prop("checked", !!fixBtSilenceGap)
+    })
+
+
+
   //buttons
   //sample sentence for the test button, by language (English for the others)
   const demoSpeechText = {
@@ -299,7 +310,7 @@
     $("#voices").empty()
     $("<option>")
       .val("")
-      .text("Auto select")
+      .text(brapi.i18n.getMessage("options_voice_auto_select"))
       .appendTo("#voices")
 
     //get voices filtered by selected languages
@@ -338,15 +349,16 @@
         .appendTo(offline)
     }
 
-    //create the standard optgroup
+    //create the standard optgroup (every voice that isn't offline: online, free or paid)
     $("<optgroup>").appendTo($("#voices"))
     var standard = $("<optgroup>")
       .attr("label", brapi.i18n.getMessage("options_voicegroup_standard"))
       .appendTo($("#voices"));
     groups.standard.forEach(function (voice) {
+      //the voice's name is its saved value (voiceName), so only the gender mark after it is translated
       var displayName = voice.voiceName
       if (voice.lang === "ko-KR" && voice.gender) {
-        displayName = voice.voiceName + " (" + (voice.gender === "female" ? "여" : "남") + ")"
+        displayName = voice.voiceName + " (" + brapi.i18n.getMessage(voice.gender === "female" ? "options_voice_female" : "options_voice_male") + ")"
       }
       $("<option>")
         .val(voice.voiceName)
@@ -419,23 +431,6 @@
                 if (granted) bgPageInvoke("authWavenet");
               })
             break;
-        }
-      })
-    }
-    else if (config.browserId == "opera" && /locked fullscreen/.test(err.message)) {
-      $("#status").html("Click <a href='#open-player-tab'>here</a> to start read aloud.").parent().show()
-      $("#status a").click(async function () {
-        try {
-          playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#test-voice").click())
-          const tab = await brapi.tabs.create({
-            url: "player.html?opener=options&autoclose=long",
-            index: 0,
-            active: false,
-          })
-          brapi.tabs.update(tab.id, { pinned: true })
-            .catch(console.error)
-        } catch (err) {
-          handleError(err)
         }
       })
     }

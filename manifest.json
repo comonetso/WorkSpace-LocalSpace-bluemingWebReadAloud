@@ -59,19 +59,19 @@
   "commands": {
     "play": {
       "suggested_key": {"default": "Alt+P"},
-      "description": "play/pause"
+      "description": "__MSG_command_play__"
     },
     "stop": {
       "suggested_key": {"default": "Alt+O"},
-      "description": "stop"
+      "description": "__MSG_command_stop__"
     },
     "forward": {
       "suggested_key": {"default": "Alt+Period"},
-      "description": "forward"
+      "description": "__MSG_command_forward__"
     },
     "rewind": {
       "suggested_key": {"default": "Alt+Comma"},
-      "description": "rewind"
+      "description": "__MSG_command_rewind__"
     }
   }
 }

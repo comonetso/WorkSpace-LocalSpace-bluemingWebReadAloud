@@ -28,7 +28,6 @@ var config = {
   },
   //the read button next to selected text (js/selection-button.js) runs on every page
   selectionButtonOrigins: ["http://*/", "https://*/"],
-  browserId: getBrowser(),
 }
 
 var defaults = {
@@ -120,9 +119,17 @@ function updateSettings(items) {
   });
 }
 
+//no names (the reset button in the options): every setting the user can change back to its default, the rate
+//of each voice ("rate" + voiceName) included — not the API credentials, nor the caches
 function clearSettings(names) {
-  return new Promise(function(fulfill) {
-    brapi.storage.local.remove(names || ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode"], fulfill);
+  var keys = names ? Promise.resolve(names) : brapi.storage.local.get(null).then(function(items) {
+    return ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip"]
+      .concat(Object.keys(items).filter(function(key) { return /^rate./.test(key) }))
+  })
+  return keys.then(function(keys) {
+    return new Promise(function(fulfill) {
+      brapi.storage.local.remove(keys, fulfill);
+    });
   });
 }
 
@@ -452,7 +459,8 @@ function ajaxGet(sUrl) {
   var opts = typeof sUrl == "string" ? {url: sUrl} : sUrl;
   return fetch(opts.url, {headers: opts.headers})
     .then(res => {
-      if (!res.ok) throw new Error("Server returns " + res.status)
+      //shown on the options and custom voices pages (a voice test, a key check): in the browser's language
+      if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
       switch (opts.responseType) {
         case "json": return res.json()
         case "blob": return res.blob()
@@ -470,7 +478,7 @@ function ajaxPost(sUrl, oData, sType) {
       body: sType == "json" ? JSON.stringify(oData) : urlEncode(oData)
     })
     .then(res => {
-      if (!res.ok) throw new Error("Server returns " + res.status)
+      if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
       return res.text()
     })
 }
@@ -515,12 +523,20 @@ function domReady() {
   })
 }
 
+//the page's words in the browser's language (_locales): data-i18n="key" for an element's text (an input's
+//value, the page's <title>), data-i18n-placeholder / data-i18n-title / data-i18n-aria-label for those attributes
 function setI18nText() {
   $("[data-i18n]").each(function() {
     var key = $(this).data("i18n");
     var text = brapi.i18n.getMessage(key);
     if ($(this).is("input")) $(this).val(text);
     else $(this).text(text);
+  })
+  var attributes = ["placeholder", "title", "aria-label"]
+  attributes.forEach(function(attr) {
+    $("[data-i18n-" + attr + "]").each(function() {
+      this.setAttribute(attr, brapi.i18n.getMessage(this.getAttribute("data-i18n-" + attr)));
+    })
   })
 }
 
@@ -530,18 +546,9 @@ function escapeHtml(text) {
   })
 }
 
-function getBrowser() {
-  if (/Opera|OPR\//.test(navigator.userAgent)) return 'opera';
-  if (/firefox/i.test(navigator.userAgent)) return 'firefox';
-  return 'chrome';
-}
-
+//the browser's page for the extension's shortcuts (Chrome and Whale: the manifest is Chrome MV3 only)
 function getHotkeySettingsUrl() {
-  switch (config.browserId) {
-    case 'opera': return 'opera://settings/configureCommands';
-    case 'chrome': return 'chrome://extensions/configureCommands';
-    default: return brapi.runtime.getURL("shortcuts.html");
-  }
+  return 'chrome://extensions/configureCommands';
 }
 
 function StateMachine(states) {

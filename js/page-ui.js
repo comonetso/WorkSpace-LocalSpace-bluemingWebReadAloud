@@ -570,7 +570,7 @@
         h("div", {class: "center"}, [
           h("div", {class: "time"}, [
             els.elapsed = h("span", {class: "elapsed"}, ["00:00:00"]),
-            els.totalPart = h("span", {class: "total"}, [" / ", els.total = h("span", {}, [message("pagebar_calculating", "계산 중")])]),
+            els.totalPart = h("span", {class: "total"}, [" / ", els.total = h("span", {}, [message("pagebar_calculating", "Calculating…")])]),
           ]),
           button("prev", () => send({cmd: "rewind"})),
           button("play", () => send({cmd: "togglePause"})),
@@ -587,10 +587,10 @@
         els.panel = h("div", {class: "panel"}, Object.keys(PARAMS).map(key => paramRow(key))),
       ])
     )
-    setIcon(els.prev, ICONS.prev, message("pagebar_prev", "이전 단락"))
-    setIcon(els.next, ICONS.next, message("pagebar_next", "다음 단락"))
-    setIcon(els.settings, ICONS.settings, message("pagebar_settings", "설정"))
-    setIcon(els.close, ICONS.close, message("pagebar_stop", "읽기 중지"))
+    setIcon(els.prev, ICONS.prev, message("pagebar_prev", "Previous paragraph"))
+    setIcon(els.next, ICONS.next, message("pagebar_next", "Next paragraph"))
+    setIcon(els.settings, ICONS.settings, message("pagebar_settings", "Voice settings"))
+    setIcon(els.close, ICONS.close, message("pagebar_stop", "Stop reading"))
     els.mute.hidden = true
     els.panel.hidden = true
     els.settings.disabled = true
@@ -694,7 +694,7 @@
     const navigable = msg.state == "PLAYING" || msg.state == "PAUSED"
     els.prev.disabled = els.next.disabled = !navigable
     els.mute.hidden = !msg.canMute
-    setIcon(els.mute, msg.muted ? ICONS.muted : ICONS.volume, msg.muted ? message("pagebar_unmute", "음소거 해제") : message("pagebar_mute", "음소거"))
+    setIcon(els.mute, msg.muted ? ICONS.muted : ICONS.volume, msg.muted ? message("pagebar_unmute", "Unmute") : message("pagebar_mute", "Mute"))
     //the voice being read ignores the pitch (most online voices)
     els.pitchRow.hidden = msg.usesPitch === false
     renderParams(msg.params)
@@ -727,8 +727,8 @@
     els.fill.style.width = (Math.max(0, Math.min(1, progress || 0)) * 100).toFixed(2) + "%"
     els.elapsed.textContent = formatTime(elapsed)
     els.total.textContent = total != null
-      ? message("pagebar_about", "약") + " " + formatTime(total)
-      : message("pagebar_calculating", "계산 중")
+      ? message("pagebar_about", "about") + " " + formatTime(total)
+      : message("pagebar_calculating", "Calculating…")
   }
 
   //refresh right when the shown second changes
@@ -749,11 +749,11 @@
     const play = bar.els.play
     if (state == "LOADING") {
       play.replaceChildren(h("span", {class: "spinner"}))
-      play.title = message("pagebar_loading", "불러오는 중")
+      play.title = message("pagebar_loading", "Loading")
       play.setAttribute("aria-label", play.title)
     }
-    else if (state == "PAUSED") setIcon(play, ICONS.play, message("pagebar_play", "재생"))
-    else setIcon(play, ICONS.pause, message("pagebar_pause", "일시정지"))
+    else if (state == "PAUSED") setIcon(play, ICONS.play, message("pagebar_play", "Resume"))
+    else setIcon(play, ICONS.pause, message("pagebar_pause", "Pause"))
   }
 
   function setIcon(button, path, label) {
@@ -807,21 +807,21 @@
   //the rate slider is logarithmic there too (rate = 3^value)
   const PARAMS = {
     rate: {
-      label: () => message("pagebar_rate", "속도"),
+      label: () => message("pagebar_rate", "Speed"),
       min: -1, max: 1, step: 0.05,
       toSlider: rate => Math.log(rate) / Math.log(3),
       fromSlider: value => Number(Math.pow(3, value).toFixed(3)),
       format: rate => rate.toFixed(2) + "x",
     },
     pitch: {
-      label: () => message("pagebar_pitch", "피치"),
+      label: () => message("pagebar_pitch", "Pitch"),
       min: 0, max: 2, step: 0.05,
       toSlider: pitch => pitch,
       fromSlider: value => Number(value.toFixed(2)),
       format: pitch => pitch.toFixed(2),
     },
     volume: {
-      label: () => message("pagebar_volume", "볼륨"),
+      label: () => message("pagebar_volume", "Volume"),
       min: 0.2, max: 1, step: 0.02,
       toSlider: volume => volume,
       fromSlider: value => Number(value.toFixed(2)),

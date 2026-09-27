@@ -31,17 +31,6 @@ body {
 .dark-mode .text-muted {
   color: #999 !important;
 }
-.dark-mode .surface {
-  background-color: #323232;
-}
-.dark-mode .primary {
-  background-color: #bb86fc;
-  color: black;
-}
-.dark-mode .secondary {
-  background-color: #03dac6;
-  color: black;
-}
 
 .modal-backdrop {
   display: none;

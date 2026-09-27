@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Blueming Web Read Aloud Options</title>
+  <title data-i18n="options_page_title">Blueming Web Read Aloud Options</title>
   <link rel="stylesheet" type="text/css" href="css/common.css">
   <link rel="stylesheet" type="text/css" href="css/options.css">
 
@@ -17,12 +17,11 @@
 </head>
 <body>
   <div class="container-fluid">
-    <button type="button" class="close" aria-label="Close">
+    <button type="button" class="close" aria-label="Close" data-i18n-aria-label="options_close_button">
       <span aria-hidden="true">&times;</span>
     </button>
     <h2>
       <span data-i18n="options_heading"></span>
-      <a href="advanced-options.html" id="expand-button" class="material-icons">open_in_new</a>
     </h2>
 
     <div class="form-group">
@@ -39,9 +38,7 @@
       <div>
         <select id="voices" class="form-control">
         </select>
-        <small id="voice-info" class="form-text text-muted">
-          Note: This voice may become unavailable at any time.
-        </small>
+        <small id="voice-info" class="form-text text-muted" data-i18n="options_wavenet_note"></small>
       </div>
 
       <div>
@@ -58,10 +55,10 @@
         <small id="rate-warning" class="form-text warning" data-i18n="options_rate_warning"></small>
       </div>
 
-      <div class="pitch-visible">
+      <div>
         <span data-i18n="options_pitch_label"></span>
       </div>
-      <div class="pitch-visible">
+      <div>
         <div id="pitch" class="slider" data-min="0" data-max="2" data-steps="40"></div>
       </div>
 
@@ -104,6 +101,11 @@
         <option value="false" data-i18n="options_icon_popup_off"></option>
         <option value="true" data-i18n="options_icon_popup_on"></option>
       </select>
+    </div>
+
+    <div class="form-group">
+      <input type="checkbox" id="fix-bt-silence-gap"
+      ><label for="fix-bt-silence-gap" data-i18n="options_fix_bt_silence_gap"></label>
     </div>
 
     <div class="form-group buttons">

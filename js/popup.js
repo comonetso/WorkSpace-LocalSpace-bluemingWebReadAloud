@@ -1,14 +1,8 @@
 
 var queryString = getQueryString()
-const playerCheckIn$ = new rxjs.Subject()
-
-registerMessageListener("popup", {
-  playerCheckIn() {
-    playerCheckIn$.next()
-  }
-})
 
 $(function() {
+  setI18nText()
   if (queryString.isPopup) $("body").addClass("is-popup")
   else getCurrentTab().then(function(currentTab) {return updateSettings({readAloudTab: currentTab.id})})
 })
@@ -95,23 +89,6 @@ function handleError(err) {
               if (granted) bgPageInvoke("authWavenet");
             })
           break;
-      }
-    })
-  }
-  else if (config.browserId == "opera" && /locked fullscreen/.test(err.message)) {
-    $("#status").html("Click <a href='#open-player-tab'>here</a> to start read aloud.").show()
-    $("#status a").click(async function() {
-      try {
-        playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#btnPlay").click())
-        const tab = await brapi.tabs.create({
-          url: "player.html?opener=popup&autoclose=long",
-          index: 0,
-          active: false,
-        })
-        brapi.tabs.update(tab.id, {pinned: true})
-          .catch(console.error)
-      } catch (err) {
-        handleError(err)
       }
     })
   }

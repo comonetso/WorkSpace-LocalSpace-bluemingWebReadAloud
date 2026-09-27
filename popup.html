@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Blueming Web Read Aloud</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">
   <link rel="stylesheet" type="text/css" href="css/common.css">
   <link rel="stylesheet" type="text/css" href="css/popup.css">
 
@@ -19,35 +18,35 @@
   <div id="status">
   </div>
   <div id="buttons">
-    <i class="material-icons button-1" id="btnRewind">&#xe020;</i>
-    <img src="img/loading.gif" id="imgLoading" />
-    <i class="material-icons button-1" id="btnPlay">&#xe037;</i>
-    <i class="material-icons button-1" id="btnPause">pause</i>
-    <i class="material-icons button-1" id="btnStop">stop</i>
-    <i class="material-icons button-1" id="btnSettings">settings</i>
-    <i class="material-icons button-1" id="btnForward">&#xe01f;</i>
+    <i class="material-icons button-1" id="btnRewind" data-i18n-title="popup_rewind" data-i18n-aria-label="popup_rewind">&#xe020;</i>
+    <img src="img/loading.gif" id="imgLoading" data-i18n-title="popup_loading" data-i18n-aria-label="popup_loading" />
+    <i class="material-icons button-1" id="btnPlay" data-i18n-title="popup_play" data-i18n-aria-label="popup_play">&#xe037;</i>
+    <i class="material-icons button-1" id="btnPause" data-i18n-title="popup_pause" data-i18n-aria-label="popup_pause">pause</i>
+    <i class="material-icons button-1" id="btnStop" data-i18n-title="popup_stop" data-i18n-aria-label="popup_stop">stop</i>
+    <i class="material-icons button-1" id="btnSettings" data-i18n-title="popup_settings" data-i18n-aria-label="popup_settings">settings</i>
+    <i class="material-icons button-1" id="btnForward" data-i18n-title="popup_forward" data-i18n-aria-label="popup_forward">&#xe01f;</i>
   </div>
   <div id="highlight">
   </div>
   <div id="toolbar">
     <div class="btn-group">
-      <button id="decrease-font-size" type="button" class="btn btn-sm btn-light">
+      <button id="decrease-font-size" type="button" class="btn btn-sm btn-light" data-i18n-title="popup_font_smaller" data-i18n-aria-label="popup_font_smaller">
         A-
       </button>
-      <button id="increase-font-size" type="button" class="btn btn-sm btn-light">
+      <button id="increase-font-size" type="button" class="btn btn-sm btn-light" data-i18n-title="popup_font_larger" data-i18n-aria-label="popup_font_larger">
         A+
       </button>
     </div>
     <div class="btn-group">
-      <button id="toggle-dark-mode" type="button" class="btn btn-sm btn-light">
+      <button id="toggle-dark-mode" type="button" class="btn btn-sm btn-light" data-i18n-title="popup_dark_mode" data-i18n-aria-label="popup_dark_mode">
         <i class="material-icons">dark_mode</i>
       </button>
     </div>
     <div class="btn-group window-size">
-      <button id="decrease-window-size" type="button" class="btn btn-sm btn-light">
+      <button id="decrease-window-size" type="button" class="btn btn-sm btn-light" data-i18n-title="popup_window_smaller" data-i18n-aria-label="popup_window_smaller">
         <i class="material-icons">remove</i>
       </button>
-      <button id="increase-window-size" type="button" class="btn btn-sm btn-light">
+      <button id="increase-window-size" type="button" class="btn btn-sm btn-light" data-i18n-title="popup_window_larger" data-i18n-aria-label="popup_window_larger">
         <i class="material-icons">add</i>
       </button>
     </div>

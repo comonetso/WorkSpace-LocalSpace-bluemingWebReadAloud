@@ -39,7 +39,14 @@ var readAloudDoc = new function() {
       await bgPageInvoke("playText", [text])
     }
     catch (err) {
-      alert(err.message)
+      alert(errorText(err))
     }
+  }
+
+  //the words of the error, not its JSON ({"code":"error_no_voice",...}): the popup's message
+  //(formatError in js/defaults.js), with a link's words kept as plain text since an alert has no links
+  function errorText(err) {
+    if (!/^{/.test(err.message)) return err.message
+    return formatError(JSON.parse(err.message)).replace(/<a [^>]*>(.*?)<\/a>/g, "$1")
   }
 }

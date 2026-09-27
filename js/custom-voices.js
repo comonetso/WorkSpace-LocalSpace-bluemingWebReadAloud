@@ -1,4 +1,5 @@
 $(function() {
+  setI18nText();
   getSettings(["awsCreds", "gcpCreds", "ibmCreds", "azureCreds", "clovaCreds"])
     .then(function(items) {
       if (items.awsCreds) {
@@ -37,6 +38,24 @@ function obfuscate(key) {
   })
 }
 
+//status lines — engine names are brand names and stay as they are
+function enabledText(engine) {
+  return brapi.i18n.getMessage("customvoices_enabled", [engine]);
+}
+
+function disabledText(engine) {
+  return brapi.i18n.getMessage("customvoices_disabled", [engine]);
+}
+
+//the error from the test (often the service's own message) goes after the translated prefix
+function testFailedText(err) {
+  return brapi.i18n.getMessage("customvoices_test_failed", [String(err.message)]);
+}
+
+function missingFieldsText() {
+  return brapi.i18n.getMessage("customvoices_missing_fields");
+}
+
 
 function awsSave() {
   $(".status").hide();
@@ -48,23 +67,23 @@ function awsSave() {
       .then(function() {
         $("#aws-progress").hide();
         updateSettings({awsCreds: {accessKeyId: accessKeyId, secretAccessKey: secretAccessKey}});
-        $("#aws-success").text("Amazon Polly voices are enabled.").show();
+        $("#aws-success").text(enabledText("Amazon Polly")).show();
         $("#aws-access-key-id").val(obfuscate(accessKeyId));
         $("#aws-secret-access-key").val(obfuscate(secretAccessKey));
       },
       function(err) {
         $("#aws-progress").hide();
-        $("#aws-error").text("Test failed: " + err.message).show();
+        $("#aws-error").text(testFailedText(err)).show();
       })
   }
   else if (!accessKeyId && !secretAccessKey) {
     clearSettings(["awsCreds"])
       .then(function() {
-        $("#aws-success").text("Amazon Polly voices are disabled.").show();
+        $("#aws-success").text(disabledText("Amazon Polly")).show();
       })
   }
   else {
-    $("#aws-error").text("Missing required fields.").show();
+    $("#aws-error").text(missingFieldsText()).show();
   }
 }
 
@@ -89,21 +108,21 @@ function gcpSave() {
         $("#gcp-progress").hide();
         updateSettings({gcpCreds: {apiKey: apiKey, enableStudio: enableStudio}});
         if (enableStudio) {
-          $("#gcp-success").text("Google Wavenet & Studio voices are enabled.").show();
+          $("#gcp-success").text(enabledText("Google Wavenet & Studio")).show();
         } else {
-          $("#gcp-success").text("Google Wavenet voices are enabled.").show();
+          $("#gcp-success").text(enabledText("Google Wavenet")).show();
         }
         $("#gcp-api-key").val(obfuscate(apiKey));
       },
       function(err) {
         $("#gcp-progress").hide();
-        $("#gcp-error").text("Test failed: " + err.message).show();
+        $("#gcp-error").text(testFailedText(err)).show();
       })
   }
   else {
     clearSettings(["gcpCreds"])
       .then(function() {
-        $("#gcp-success").text("Google Wavenet voices are disabled.").show();
+        $("#gcp-success").text(disabledText("Google Wavenet")).show();
       })
   }
 }
@@ -123,30 +142,30 @@ function ibmSave() {
       .then(function() {
         $("#ibm-progress").hide();
         updateSettings({ibmCreds: {apiKey: apiKey, url: url}});
-        $("#ibm-success").text("IBM Watson voices are enabled.").show();
+        $("#ibm-success").text(enabledText("IBM Watson")).show();
         $("#ibm-api-key").val(obfuscate(apiKey));
         $("#ibm-url").val(obfuscate(url));
       },
       function(err) {
         $("#ibm-progress").hide();
-        $("#ibm-error").text("Test failed: " + err.message).show();
+        $("#ibm-error").text(testFailedText(err)).show();
       })
   }
   else if (!apiKey && !url) {
     clearSettings(["ibmCreds"])
       .then(function() {
-        $("#ibm-success").text("IBM Watson voices are disabled.").show();
+        $("#ibm-success").text(disabledText("IBM Watson")).show();
       })
   }
   else {
-    $("#ibm-error").text("Missing required fields.").show();
+    $("#ibm-error").text(missingFieldsText()).show();
   }
 }
 
 function testIbm(apiKey, url) {
   return brapi.permissions.request({origins: [url + "/*"]})
     .then(function(granted) {
-      if (!granted) throw new Error("Permission not granted");
+      if (!granted) throw new Error(brapi.i18n.getMessage("customvoices_error_permission"));
     })
     .then(function() {
       return ibmWatsonTtsEngine.fetchVoices(apiKey, url);
@@ -163,11 +182,11 @@ async function azureSave() {
     try {
       await testAzure(region, key)
       await updateSettings({azureCreds: {region, key}})
-      $("#azure-success").text("Azure voices are enabled.").show()
+      $("#azure-success").text(enabledText("Azure")).show()
       $("#azure-key").val(obfuscate(key))
     }
     catch (err) {
-      $("#azure-error").text("Test failed: " + err.message).show()
+      $("#azure-error").text(testFailedText(err)).show()
     }
     finally {
       $("#azure-progress").hide()
@@ -175,10 +194,10 @@ async function azureSave() {
   }
   else if (!region && !key) {
     await clearSettings(["azureCreds"])
-    $("#azure-success").text("IBM Watson voices are disabled.").show()
+    $("#azure-success").text(disabledText("Azure")).show()
   }
   else {
-    $("#azure-error").text("Missing required fields.").show()
+    $("#azure-error").text(missingFieldsText()).show()
   }
 }
 
@@ -198,12 +217,12 @@ async function clovaSave() {
     try {
       await testClova(clientId, clientSecret, apiUrl)
       await updateSettings({clovaCreds: {clientId, clientSecret, apiUrl}})
-      $("#clova-success").text("Naver Clova voices are enabled.").show()
+      $("#clova-success").text(enabledText("Naver Clova")).show()
       $("#clova-client-id").val(obfuscate(clientId))
       $("#clova-client-secret").val(obfuscate(clientSecret))
     }
     catch (err) {
-      $("#clova-error").text("Test failed: " + err.message).show()
+      $("#clova-error").text(testFailedText(err)).show()
     }
     finally {
       $("#clova-progress").hide()
@@ -211,17 +230,17 @@ async function clovaSave() {
   }
   else if (!clientId && !clientSecret) {
     await clearSettings(["clovaCreds"])
-    $("#clova-success").text("Naver Clova voices are disabled.").show()
+    $("#clova-success").text(disabledText("Naver Clova")).show()
   }
   else {
-    $("#clova-error").text("Missing required fields.").show()
+    $("#clova-error").text(missingFieldsText()).show()
   }
 }
 
 async function testClova(clientId, clientSecret, apiUrl) {
   // 파라미터 확인
-  if (!apiUrl) throw new Error("Invalid API URL")
-  if (!clientId || !clientSecret) throw new Error("Missing client credentials")
+  if (!apiUrl) throw new Error(brapi.i18n.getMessage("customvoices_error_invalid_url"))
+  if (!clientId || !clientSecret) throw new Error(missingFieldsText())
 
   // API URL이 /tts로 끝나지 않으면 추가
   let testUrl = apiUrl;
@@ -253,7 +272,7 @@ async function testClova(clientId, clientSecret, apiUrl) {
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => "");
-      throw new Error(`API Error (${res.status}): ${errorText}`);
+      throw new Error(brapi.i18n.getMessage("customvoices_error_api", [String(res.status), errorText]));
     }
 
     // 응답 확인 (blob 타입이어야 함)
@@ -296,6 +315,7 @@ $(function() {
   status$.subscribe(status => {
     $(".openai .status.progress").toggle(status.type == "PROGRESS")
     $(".openai .status.success").toggle(status.type == "SUCCESS")
+      .text(status.type == "SUCCESS" ? enabledText("OpenAI") : "")
     $(".openai .status.error").toggle(status.type == "ERROR")
       .text(status.type == "ERROR" ? status.error.message : "")
   })
@@ -311,6 +331,7 @@ $(function() {
   })
   $(".openai .btn-delete").click(() => {
     clearSettings(["openaiCreds"])
+    status$.next({type: "IDLE"})
     editMode$.next(false)
   })
   $(".openai .btn-save").click(async () => {
@@ -324,7 +345,8 @@ $(function() {
       await openaiTtsEngine.test(openaiCreds)
       await updateSettings({openaiCreds})
       editMode$.next(false)
-      status$.next({type: "IDLE"})
+      //the success line sits in the saved view, like the other engines' "voices are enabled"
+      status$.next({type: "SUCCESS"})
     } catch (err) {
       status$.next({type: "ERROR", error: err})
     }

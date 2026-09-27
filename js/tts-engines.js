@@ -143,7 +143,8 @@ function TimeoutTtsEngine(baseEngine, startTimeout, endTimeout) {
         with() {
           console.debug(`No 'start' event after ${startTimeout}, will call stop() and retry once`)
           baseEngine.stop()
-          return rxjs.throwError(() => new Error("Timeout, TTS never started, try picking another voice?"))
+          //shown on the options page's voice test (and the popup): in the browser's language
+          return rxjs.throwError(() => new Error(brapi.i18n.getMessage("error_tts_not_started")))
         }
       }),
       rxjs.retry(1),
@@ -977,7 +978,7 @@ function NaverClovaTtsEngine() {
           }
 
           if (!response.success) {
-            reject(new Error(response.error || "API 호출 실패"));
+            reject(new Error(response.error || "API call failed"));
             return;
           }
 
@@ -1046,7 +1047,8 @@ function AzureTtsEngine() {
         "Ocp-Apim-Subscription-Key": key,
       }
     })
-    if (!res.ok) throw new Error("Server return " + res.status)
+    //shown on the custom voices page's key check
+    if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
     const voices = await res.json()
     return voices.map(item => {
       const name = item.ShortName.split("-")[2]
@@ -1071,7 +1073,7 @@ function AzureTtsEngine() {
       },
       body: `<speak version='1.0' xml:lang='${lang}'><voice name='${voiceName}'>${escapeXml(text)}</voice></speak>`
     })
-    if (!res.ok) throw new Error("Server return " + res.status)
+    if (!res.ok) throw new Error(brapi.i18n.getMessage("error_server_status", [String(res.status)]))
     const blob = await res.blob()
     return URL.createObjectURL(blob)
   }
