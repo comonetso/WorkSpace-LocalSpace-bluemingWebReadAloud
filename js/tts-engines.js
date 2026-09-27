@@ -526,7 +526,7 @@ function GoogleWavenetTtsEngine() {
               throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
             })
         }
-        const markup = commaPauses(text, voice, voiceType)
+        const markup = pausesMarkup(text, voice, voiceType)
         //if the pauses are refused, it's read without them rather than not at all
         return markup ? synthesize({markup: markup}).catch(function(err) {
           console.error(err);
@@ -540,10 +540,12 @@ function GoogleWavenetTtsEngine() {
   }
   //Korean Chirp 3 HD voices hardly pause at a comma (0.29s: less than between two clauses without one), so a short
   //pause is asked for after each comma of a sentence ("[pause short]" in markup: 0.41s, chosen by ear 2026-09-26).
+  //Nor much at an arrow, made a full stop and an em space by js/spoken-text.js (0.25-0.5s after short words, like
+  //the comma's): a pause is asked for there ("[pause]": 0.75-0.9s, chosen by ear 2026-09-27).
   //The text's own brackets become parentheses, so that none is taken for a tag. Null where it doesn't apply
-  function commaPauses(text, voice, voiceType) {
-    if (voiceType != "Chirp3-HD" || !/^ko/i.test(voice.lang) || !/,\s/.test(text)) return null;
-    return text.replace(/\[/g, "(").replace(/\]/g, ")").replace(/,(?=\s)/g, ", [pause short]");
+  function pausesMarkup(text, voice, voiceType) {
+    if (voiceType != "Chirp3-HD" || !/^ko/i.test(voice.lang) || !/,\s| /.test(text)) return null;
+    return text.replace(/\[/g, "(").replace(/\]/g, ")").replace(/,(?=\s)/g, ", [pause short]").replace(/ /g, " [pause] ");
   }
   var voices = [
     {"voiceName":"GoogleStandard Spanish; Castilian (Anna)","lang":"es-ES","gender":"female"},

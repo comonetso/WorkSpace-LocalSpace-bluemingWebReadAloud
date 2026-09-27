@@ -13,6 +13,9 @@
  *   - a name in camel case is read word by word (alignSegmentsToSource → "align Segments To Source"), unless
  *     a part of it is left to the voice (McDonald, PyTorch, iPhone): then the whole name is
  *   - a Korean voice pauses at the comma of a number (2,200 → "이, 이백"): thousands separators are left out
+ *   - signs a voice reads out by name where they only shape the text: an arrow is a pause as at a full stop
+ *     (동남아 → 일본 → "동남아. 일본"), a slash left between words one as at a comma (알류샨/알래스카, UI/UX →
+ *     "UI, UX"), and the asterisks of bold text shown unrendered (**“…”**) are left out
  * Everything else is left to the voice. English words: js/english-words.js.
  *
  * The page keeps showing the original segment (Speech getInfo): sourceIndex() maps a position in the
@@ -45,6 +48,18 @@ const SPOKEN_TOKEN = /(?<![\p{Script=Latin}\d])(?:(?<=^|[\s(\[{<"'`“‘=:~])[.
 //a number with thousands separators (2,200, 1,000,000, 12,345.67), not a list (1,2,3)
 const SPOKEN_THOUSANDS = /(?<![\d,.])\d{1,3}(?:,\d{3})+(?!\d|,\d)/g
 
+//signs read out by name (chosen by ear 2026-09-27), with the spaces around them: an arrow pointing right (→ ⇒ ➡,
+//-> between spaces), asterisks of bold text (**), slashes not taken for a file name or path
+const SPOKEN_MARKS = /(\s*(?:[→⇒⇨⇾⟶⟹➔➜➝➞➡⮕]️?|(?<=^|\s)-{1,2}>(?=\s|$))\s*)|(\*{2,})|(\s*\/+\s*)/gu
+
+//what a mark said as a pause doesn't follow or come before: another pause, or an opening bracket or quote
+const SPOKEN_PAUSES = /[.!?,;:…。！？、，；：]/
+const SPOKEN_OPENINGS = /[(\[{<“‘]/
+
+//the space after an arrow's full stop: an em space, for a voice that can be asked for a longer pause there
+//(pausesMarkup in js/tts-engines.js); other voices take it for a space. The segment's own em spaces become plain ones
+const SPOKEN_ARROW_SPACE = " "
+
 //words: Map of English words (js/english-words.js), given only by tests
 function makeSpokenText(text, lang, words) {
   words = words || englishWords
@@ -62,6 +77,7 @@ function makeSpokenText(text, lang, words) {
       last = token.at + token.text.length
     }
     put(keep(text.slice(last), last))
+    sayMarks()
     if (signs == SPOKEN_SIGNS.ko) dropThousandsSeparators()
   }
   else {
@@ -74,6 +90,44 @@ function makeSpokenText(text, lang, words) {
     sourceIndex: i => i >= 0 && i < src.length ? src[i] : text.length,
   }
 
+
+  //an arrow becomes a full stop, a slash a comma, asterisks nothing (SPOKEN_MARKS), taken as coming from the sign.
+  //A slash or asterisks right between numbers are left to the voice (9/27, 1/2, 2**3: a date, a fraction, a power)
+  function sayMarks() {
+    out = out.split(SPOKEN_ARROW_SPACE).join(" ")
+    let kept = "", last = 0
+    const keptSrc = []
+    const keepUpTo = end => {
+      kept += out.slice(last, end)
+      for (let k = last; k < end; k++) keptSrc.push(src[k])
+      last = end
+    }
+    for (const match of out.matchAll(SPOKEN_MARKS)) {
+      const [marks, arrow, stars] = match
+      const at = match.index, end = at + marks.length
+      const after = out[end]
+      if (!arrow && /\d/.test(out[at - 1]) && /\d/.test(after) && !/\s/.test(marks)) continue
+      keepUpTo(at)
+      last = end
+      if (stars) continue
+      //what the pause follows as it's said (an arrow after another: "A → → B")
+      while (/\s$/.test(kept)) {
+        kept = kept.slice(0, -1)
+        keptSrc.pop()
+      }
+      const before = kept[kept.length - 1]
+      if (!before || !after && !arrow || SPOKEN_PAUSES.test(after)) continue
+      const opening = SPOKEN_OPENINGS.test(before)
+      const said = opening ? ""
+        : (SPOKEN_PAUSES.test(before) ? "" : arrow ? "." : ",") + (!after ? "" : arrow ? SPOKEN_ARROW_SPACE : " ")
+      const from = src[at + marks.search(/\S/)]
+      kept += said
+      for (let k = 0; k < said.length; k++) keptSrc.push(from)
+    }
+    keepUpTo(out.length)
+    out = kept
+    src = keptSrc
+  }
 
   //numbers are left as they are, so their commas are still where they were in the segment
   function dropThousandsSeparators() {
