@@ -47,10 +47,13 @@ brapi.action.onClicked.addListener(function(tab) {
 })
 
 //the tab being (or paused while being) read: the embedded player sits inside it; a player tab
-//of its own doesn't tell, then the last whole-page source (sourceUri) does
+//of its own doesn't tell, then the tab the last reading was started for (preparePlayer) does,
+//then the last whole-page source (sourceUri)
 async function getReadingTabId() {
   const where = await sendToPlayer({method: "getPlayerTab"}).catch(err => null)
   if (where && where.embedded && where.tabId != null) return where.tabId
+  const {readingTabId} = brapi.storage.session ? await brapi.storage.session.get("readingTabId") : {}
+  if (readingTabId != null) return readingTabId
   const {sourceUri} = await brapi.storage.local.get("sourceUri")
   if (sourceUri && sourceUri.startsWith("contentscript:")) return Number(sourceUri.substr(14))
   return null
@@ -314,7 +317,7 @@ var currentTask = {
 async function playText(text, opts, ui) {
   //the player goes inside the page read from (a selection's tab), which may not be the active one
   const tab = ui && await getTab(ui.tabId) || await getActiveTab()
-  if (!await readyPlayer(tab)) await injectPlayer(tab)
+  await preparePlayer(tab)
   if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playText", args: [text, opts]})
 }
@@ -345,9 +348,16 @@ async function playTab(tabId) {
     task.end()
   }
 
-  if (!await readyPlayer(tab)) await injectPlayer(tab)
+  await preparePlayer(tab)
   if (ui) await startPageUi(ui)
   await sendToPlayer({method: "playTab"})
+}
+
+//a player tab of its own can't tell which tab it reads for: remembered for the icon (getReadingTabId), e.g.
+//reading Aside's chat from the right-click menu (another extension's page: the player can't go in)
+async function preparePlayer(tab) {
+  if (!await readyPlayer(tab)) await injectPlayer(tab)
+  if (brapi.storage.session) await brapi.storage.session.set({readingTabId: tab ? tab.id : null})
 }
 
 //stops the player; true if it's there to read in this tab. One inside another page is closed instead: that page
