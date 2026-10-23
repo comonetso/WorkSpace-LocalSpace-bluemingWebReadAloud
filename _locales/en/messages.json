@@ -23,8 +23,8 @@
   "options_enable_custom_voices": {
     "message": "Add voices with an API key…"
   },
-  "options_rate_label": {
-    "message": "Speed"
+  "options_rate_step_label": {
+    "message": "Speed step"
   },
   "options_rate_warning": {
     "message": "Note: some voices may not work at a high speed."

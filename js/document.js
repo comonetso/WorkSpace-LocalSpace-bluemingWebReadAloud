@@ -269,7 +269,8 @@ function Doc(source, onEnd) {
 
   async function getSpeech(texts) {
     const settings = await getSettings()
-    settings.rate = await getSetting("rate" + (settings.voiceName || ""))
+    //in the page bar's list, so the speed heard is the one shown (js/defaults.js getListedRate)
+    settings.rate = await getListedRate(settings.voiceName)
     var lang = (!info.detectedLang || info.lang && info.lang.startsWith(info.detectedLang)) ? info.lang : info.detectedLang;
     console.log("Declared", info.lang, "- Detected", info.detectedLang, "- Chosen", lang)
     var options = {

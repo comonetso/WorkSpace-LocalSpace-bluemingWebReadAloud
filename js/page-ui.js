@@ -580,6 +580,7 @@
         ]),
         h("div", {class: "end"}, [
           button("settings", () => togglePanel()),
+          els.speed = h("select", {class: "speed"}),
           button("close", () => {
             send({cmd: "stop"})
             host.style.setProperty("display", "none", "important")
@@ -592,16 +593,23 @@
     setIcon(els.next, ICONS.next, message("pagebar_next", "Next paragraph"))
     setIcon(els.settings, ICONS.settings, message("pagebar_settings", "Voice settings"))
     setIcon(els.close, ICONS.close, message("pagebar_stop", "Stop reading"))
+    els.speed.title = message("pagebar_rate", "Speed")
+    els.speed.setAttribute("aria-label", els.speed.title)
+    els.speed.disabled = true
+    els.speed.addEventListener("change", () => send({cmd: "setParams", params: {rate: Number(els.speed.value)}}))
     els.mute.hidden = true
     els.panel.hidden = true
     els.settings.disabled = true
     els.settings.setAttribute("aria-expanded", "false")
 
     const editing = {}
-    //the page's own mouse/key handlers (copy protection, shortcut keys) must not get the panel's input
-    for (const type of ["mousedown", "pointerdown", "keydown"]) els.panel.addEventListener(type, event => event.stopPropagation())
+    //the page's own mouse/key handlers (copy protection, shortcut keys) must not get the panel's or the speed
+    //list's input
+    for (const el of [els.panel, els.speed]) {
+      for (const type of ["mousedown", "pointerdown", "keydown"]) el.addEventListener(type, event => event.stopPropagation())
+    }
 
-    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null}
+    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null, speeds: null}
     renderPlayButton("LOADING")
     //on <html>, not <body>: a transform/filter on body would make "fixed" relative to the body
     document.documentElement.append(host)
@@ -699,6 +707,25 @@
     //the voice being read ignores the pitch (most online voices)
     els.pitchRow.hidden = msg.usesPitch === false
     renderParams(msg.params)
+    renderSpeed(msg.speeds, msg.params)
+  }
+
+  //the speed list next to the close button (2026-10-24), made again only when the list changes
+  function renderSpeed(speeds, params) {
+    const select = bar.els.speed
+    select.disabled = !speeds || !params
+    if (select.disabled) return
+    const key = speeds.join(" ")
+    if (bar.speeds != key) {
+      bar.speeds = key
+      select.replaceChildren(...speeds.map(value => h("option", {value: String(value)}, [formatSpeed(value)])))
+    }
+    select.value = String(params.rate)
+  }
+
+  //1.0x, 0.75x: one decimal unless a second is needed
+  function formatSpeed(rate) {
+    return rate.toFixed(Number.isInteger(Math.round(rate * 100) / 10) ? 1 : 2) + "x"
   }
 
   function renderParams(params) {
@@ -817,16 +844,9 @@
     settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
   }
 
-  //settings panel sliders: same ranges and 40 steps as the options page (options.html #rate/#pitch/#volume),
-  //the rate slider is logarithmic there too (rate = 3^value)
+  //settings panel sliders: same ranges and 40 steps as the options page (options.html #pitch/#volume).
+  //No speed here: it's picked from the list next to the close button (2026-10-24, renderSpeed)
   const PARAMS = {
-    rate: {
-      label: () => message("pagebar_rate", "Speed"),
-      min: -1, max: 1, step: 0.05,
-      toSlider: rate => Math.log(rate) / Math.log(3),
-      fromSlider: value => Number(Math.pow(3, value).toFixed(3)),
-      format: rate => rate.toFixed(2) + "x",
-    },
     pitch: {
       label: () => message("pagebar_pitch", "Pitch"),
       min: 0, max: 2, step: 0.05,
@@ -927,7 +947,22 @@
       grid-column: 3;
       justify-self: end;
       display: flex;
+      align-items: center;
       gap: 4px;
+    }
+    select.speed {
+      color-scheme: dark;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+    select.speed:focus-visible {
+      outline: 2px solid #8fb3ff;
+      outline-offset: 1px;
+    }
+    select.speed:disabled {
+      opacity: 0.35;
+      cursor: default;
     }
     button.settings[aria-expanded="true"] {
       background: rgba(255, 255, 255, 0.14);

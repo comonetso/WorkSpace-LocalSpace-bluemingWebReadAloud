@@ -32,6 +32,7 @@ var config = {
 
 var defaults = {
   rate: 1.0,
+  speedStep: 0.1,
   pitch: 1.0,
   volume: 1.0,
   showHighlighting: 1,
@@ -123,7 +124,7 @@ function updateSettings(items) {
 //of each voice ("rate" + voiceName) included — not the API credentials, nor the caches
 function clearSettings(names) {
   var keys = names ? Promise.resolve(names) : brapi.storage.local.get(null).then(function(items) {
-    return ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip", "uiLanguage"]
+    return ["voiceName", "rate", "speedStep", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip", "uiLanguage"]
       .concat(Object.keys(items).filter(function(key) { return /^rate./.test(key) }))
   })
   return keys.then(function(keys) {
@@ -152,6 +153,44 @@ function observeSetting(name) {
       rxjs.map(settings => settings[name].newValue)
     )
   )
+}
+
+//the speed is picked on the page bar (js/page-ui.js) from a list, every 0.1 or every 0.25 as chosen in the
+//options (2026-10-24). A saved speed not in the list goes to the nearest one, the faster on a tie
+var speedLists = {
+  "0.1": {from: 0.7, to: 2.0},
+  "0.25": {from: 0.5, to: 3.0},
+}
+
+function speedStepOf(step) {
+  return speedLists[step] ? Number(step) : defaults.speedStep
+}
+
+function speedList(step) {
+  step = speedStepOf(step)
+  var range = speedLists[step]
+  var count = Math.round((range.to - range.from) / step)
+  var list = []
+  for (var i = 0; i <= count; i++) list.push(Number((range.from + i * step).toFixed(2)))
+  return list
+}
+
+//in thousandths, as speeds are saved: 1.25 is exactly between 1.2 and 1.3, so 1.3
+function nearestSpeed(rate, list) {
+  var distance = function(value) { return Math.abs(Math.round(value * 1000) - Math.round(rate * 1000)) }
+  return list.reduce(function(best, value) {
+    return distance(value) < distance(best) || (distance(value) == distance(best) && value > best) ? value : best
+  })
+}
+
+//a voice's speed as read and shown: the saved one moved into the list, and saved again if it moved
+async function getListedRate(voiceName) {
+  var key = "rate" + (voiceName || "")
+  var settings = await getSettings([key, "speedStep"])
+  var saved = settings[key]
+  var rate = nearestSpeed(saved || defaults.rate, speedList(settings.speedStep))
+  if (saved && saved != rate) await updateSetting(key, rate)
+  return rate
 }
 
 

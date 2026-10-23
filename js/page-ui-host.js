@@ -58,6 +58,7 @@ const pageUiHost = immediate(() => {
       lastHighlight: null,
       tick: null,
       params: null,
+      speeds: null,
       liveVolume: null,
       liveRate: null,
       startFraction: null,
@@ -190,12 +191,14 @@ const pageUiHost = immediate(() => {
     loadParams(s)
   }
 
-  //rate/pitch/volume as saved, read the same way as getSpeech() in js/document.js
+  //rate/pitch/volume as saved, read the same way as getSpeech() in js/document.js. The bar's speed list is the
+  //step chosen when the reading began: a step changed meanwhile shows from the next reading (2026-10-24)
   async function loadParams(s) {
-    const settings = await getSettings()
-    const rate = await getSetting("rate" + (settings.voiceName || ""))
+    const settings = await getSettings(["voiceName", "pitch", "volume", "speedStep"])
+    const rate = await getListedRate(settings.voiceName)
+    s.speeds = speedList(settings.speedStep)
     s.params = {
-      rate: rate || defaults.rate,
+      rate,
       pitch: settings.pitch || defaults.pitch,
       volume: settings.volume || defaults.volume,
     }
@@ -370,6 +373,8 @@ const pageUiHost = immediate(() => {
       canMute: s.canMute,
       muted,
       params: s.params,
+      //the bar's speed list, picked next to the close button
+      speeds: s.speeds,
       //voices that ignore the pitch get no pitch slider
       usesPitch: s.speech ? s.speech.usesPitch : true,
     })

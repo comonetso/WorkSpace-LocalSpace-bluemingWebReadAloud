@@ -84,42 +84,27 @@
 
 
 
-  //rate
-  const rateSliderPromise = domReadyPromise
+  //rate: picked on the page bar from a list (js/page-ui.js); only the list's step is picked here (2026-10-24,
+  //the slider and the typed value removed). A new step moves the voice's speed into the new list right away
+  //(1.25 every 0.25 is 1.3 every 0.1); a reading going on keeps its list until the next one
+  domReadyPromise
     .then(() => {
-      const slider = createSlider($("#rate").get(0), {
-        onChange(value) {
-          const rate = Math.pow($("#rate").data("pow"), value)
-          updateSetting("rate" + $("#voices").val(), Number(rate.toFixed(3)))
-        }
-      })
-      $("#rate-edit-button")
-        .click(function () {
-          $("#rate, #rate-input-div").toggle();
-        });
-      $("#rate-input")
-        .change(function () {
-          var val = $(this).val().trim();
-          if (isNaN(val)) $(this).val(1);
-          else if (val < .1) $(this).val(.1);
-          else if (val > 10) $(this).val(10);
-          else $("#rate-edit-button").hide();
-          updateSetting("rate" + $("#voices").val(), Number($(this).val()))
-        });
-      return slider
+      $("#rate-step")
+        .append(Object.keys(speedLists).map(step => $("<option>").val(step).text(step)))
+        .change(async function () {
+          await updateSettings({ speedStep: Number($(this).val()) })
+          const { voiceName } = await getSettings(["voiceName"])
+          await getListedRate(voiceName)
+        })
     })
+
+  rxjs.combineLatest([observeSetting("speedStep"), domReadyPromise])
+    .subscribe(([step]) => $("#rate-step").val(String(speedStepOf(step))))
 
   const rateObservable = observeSetting("voiceName")
     .pipe(
-      rxjs.switchMap(voiceName => observeSetting("rate" + (voiceName || ""))),
-      rxjs.share()
+      rxjs.switchMap(voiceName => observeSetting("rate" + (voiceName || "")))
     )
-
-  rxjs.combineLatest([rateObservable, rateSliderPromise])
-    .subscribe(([rate, slider]) => {
-      slider.setValue(Math.log(rate || defaults.rate) / Math.log($("#rate").data("pow")))
-      $("#rate-input").val(rate || defaults.rate)
-    })
 
   rxjs.combineLatest([observeSetting("voiceName"), rateObservable, domReadyPromise])
     .subscribe(([voiceName, rate]) => {

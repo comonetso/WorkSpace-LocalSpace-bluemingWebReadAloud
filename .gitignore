@@ -56,3 +56,4 @@ CLAUDE.md
 .agent/
 docs/session_logs/
 docs/codex_rescue/
+docs/_msg/

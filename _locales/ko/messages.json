@@ -23,8 +23,8 @@
   "options_enable_custom_voices": {
     "message": "API key로 음성 추가…"
   },
-  "options_rate_label": {
-    "message": "속도"
+  "options_rate_step_label": {
+    "message": "속도 간격"
   },
   "options_rate_warning": {
     "message": "참고: 일부 음성은 빠른 속도에서 제대로 읽지 못할 수 있습니다."

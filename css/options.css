@@ -194,10 +194,6 @@ input[type=checkbox] + label {
   margin-top: 1em;
 }
 
-#rate-input-div {
-  display: none;
-}
-
 #rate-warning {
   color: blue;
   display: none;
