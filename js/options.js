@@ -86,7 +86,8 @@
 
   //rate: picked on the page bar from a list (js/page-ui.js); only the list's step is picked here (2026-10-24,
   //the slider and the typed value removed). A new step moves the voice's speed into the new list right away
-  //(1.25 every 0.25 is 1.3 every 0.1); a reading going on keeps its list until the next one
+  //(1.25 every 0.25 is 1.3 every 0.1); a reading going on takes the new list and speed now (js/page-ui-host.js
+  //onSpeedStep)
   domReadyPromise
     .then(() => {
       $("#rate-step")

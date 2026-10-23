@@ -609,7 +609,20 @@
       for (const type of ["mousedown", "pointerdown", "keydown"]) el.addEventListener(type, event => event.stopPropagation())
     }
 
-    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null, speeds: null}
+    //Ctrl+←/→ while the bar is up (paused too, 2026-10-24): one place slower/faster on the speed list, kept
+    //from the page so the caret doesn't move a word. Only this top page gets the keys: they go to the document
+    //with the focus (an iframe's, the address bar's get none). Ctrl+Shift (selecting words) is left alone
+    const onKey = event => {
+      if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey || event.isComposing) return
+      const dir = event.key == "ArrowLeft" ? -1 : event.key == "ArrowRight" ? 1 : 0
+      if (!dir) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      send({cmd: "stepSpeed", dir})
+    }
+    window.addEventListener("keydown", onKey, true)
+
+    bar = {port, host, els, editing, muted: false, state: null, last: null, timer: null, onOutside: null, speeds: null, onKey}
     renderPlayButton("LOADING")
     //on <html>, not <body>: a transform/filter on body would make "fixed" relative to the body
     document.documentElement.append(host)
@@ -673,10 +686,11 @@
 
   function removeBar() {
     if (!bar) return
-    const {port, host, timer, onOutside} = bar
+    const {port, host, timer, onOutside, onKey} = bar
     bar = null
     clearTimeout(timer)
     if (onOutside) listenOutside(onOutside, false)
+    window.removeEventListener("keydown", onKey, true)
     host.remove()
     try { port.disconnect() } catch (err) {}
   }

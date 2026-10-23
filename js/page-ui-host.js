@@ -13,6 +13,10 @@ const pageUiHost = immediate(() => {
   let muted = false
 
   brapi.runtime.onConnect.addListener(onConnect)
+  //a step changed in the options while reading: the bar takes the new list and the speed moves into it now
+  brapi.storage.onChanged.addListener(changes => {
+    if (changes.speedStep) onSpeedStep(changes.speedStep.newValue)
+  })
 
   return {
     begin,
@@ -59,6 +63,7 @@ const pageUiHost = immediate(() => {
       tick: null,
       params: null,
       speeds: null,
+      askedRate: null,
       liveVolume: null,
       liveRate: null,
       startFraction: null,
@@ -148,6 +153,7 @@ const pageUiHost = immediate(() => {
           case "stop": return stop()
           case "mute": return setMuted(!!msg.value)
           case "setParams": return applyParams(s, msg.params)
+          case "stepSpeed": return stepSpeed(s, msg.dir)
         }
       })
       .catch(console.error)
@@ -191,8 +197,8 @@ const pageUiHost = immediate(() => {
     loadParams(s)
   }
 
-  //rate/pitch/volume as saved, read the same way as getSpeech() in js/document.js. The bar's speed list is the
-  //step chosen when the reading began: a step changed meanwhile shows from the next reading (2026-10-24)
+  //rate/pitch/volume as saved, read the same way as getSpeech() in js/document.js, and the bar's speed list
+  //(a step changed while reading: onSpeedStep)
   async function loadParams(s) {
     const settings = await getSettings(["voiceName", "pitch", "volume", "speedStep"])
     const rate = await getListedRate(settings.voiceName)
@@ -248,6 +254,31 @@ const pageUiHost = immediate(() => {
       }
     }
     pushBar()
+  }
+
+  //the options' speed step changed (2026-10-24, from the next reading before): the bar's list now, and the
+  //speed moved into it — applied and saved like a pick on the bar
+  function onSpeedStep(step) {
+    const s = session
+    if (!s || !s.params) return
+    s.speeds = speedList(step)
+    const rate = nearestSpeed(s.params.rate, s.speeds)
+    if (rate != s.params.rate) applyParams(s, {rate}).catch(console.error)
+    else pushBar()
+  }
+
+  //Ctrl+←/→ on the page (js/page-ui.js): one place along the bar's list, staying put at its ends. Counted
+  //from the speed last asked for, so quick presses don't land on the same place before the first is applied
+  function stepSpeed(s, dir) {
+    if (!s.speeds || !s.params) return
+    const from = s.askedRate != null ? s.askedRate : s.params.rate
+    const index = s.speeds.indexOf(nearestSpeed(from, s.speeds))
+    const rate = s.speeds[Math.max(0, Math.min(s.speeds.length - 1, index + (dir < 0 ? -1 : 1)))]
+    if (rate == from) return
+    s.askedRate = rate
+    return applyParams(s, {rate}).finally(() => {
+      if (s.askedRate == rate) s.askedRate = null
+    })
   }
 
   //audio files: the old audio plays on while the current segment is made again with the new values,
