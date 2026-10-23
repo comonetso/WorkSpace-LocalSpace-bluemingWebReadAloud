@@ -66,6 +66,13 @@ function TabSource() {
     return sendToSource({method: "getTexts", args: [index, quietly]})
       .finally(function() {waiting = false})
   }
+  //what the page shows now, while reading it (js/content/html-doc.js refreshTexts): null where it can't tell
+  this.refreshTexts = function(fromElem, toElem) {
+    return sendToSource({method: "refreshTexts", args: [fromElem, toElem]})
+  }
+  this.waitTranslated = function(index, timeoutMs, markWaitMs) {
+    return sendToSource({method: "waitTranslated", args: [index, timeoutMs, markWaitMs]})
+  }
   this.close = function() {
     return Promise.resolve();
   }
@@ -187,6 +194,7 @@ function Doc(source, onEnd) {
     }
     if (activeSpeech) return;
     activeSpeech = await getSpeech(texts);
+    if (source.refreshTexts && info.singlePage && currentIndex >= 0) followPage(activeSpeech)
     if (self.onSpeech) self.onSpeech(activeSpeech, {pageIndex: currentIndex, singlePage: !!info.singlePage || currentIndex == -100, sourceParas})
     await wait(playbackState, "resumed")
     activeSpeech.onEnd = function(err) {
@@ -204,6 +212,24 @@ function Doc(source, onEnd) {
     };
     if (rewinded) await activeSpeech.gotoEnd();
     return activeSpeech.play();
+  }
+
+  //whole-page reading reads the page as it shows it while reading, a translator rewriting it meanwhile (Speech
+  //follow(), 2026-10-24). A paragraph the translator hasn't done yet is waited for this long, then read as it is
+  //(5 seconds: the user's choice; DeepL took about 2 once in view). On a page DeepL translates, a paragraph it hasn't
+  //marked yet is brought into view and watched this long for its mark (1 second: the user's choice; DeepL marked one
+  //in 0.3 on docs.aside.com), else read as it is
+  const TRANSLATION_WAIT_MS = 5000
+  const TRANSLATION_MARK_WAIT_MS = 1000
+
+  function followPage(speech) {
+    speech.follow({
+      refresh: async (fromElem, toElem) => {
+        const page = await source.refreshTexts(fromElem, toElem)
+        return page && page.texts ? {...page, texts: page.texts.map(preprocess)} : null
+      },
+      waitTranslated: index => source.waitTranslated(index, TRANSLATION_WAIT_MS, TRANSLATION_MARK_WAIT_MS),
+    })
   }
 
   //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync

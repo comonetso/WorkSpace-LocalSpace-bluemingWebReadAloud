@@ -10,6 +10,8 @@ function Speech(texts, options) {
   //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
   var needsPeriod = options.splitParagraphs ? /[^\s.!?,;:…。！？、，；：]$/ : /[\w)]$/;
   for (var i=0; i<texts.length; i++) if (needsPeriod.test(texts[i])) texts[i] += '.';
+  //the paragraphs the segments are cut from, for following what the page shows (follow())
+  let paras = texts.slice()
   if (texts.length) texts = getChunks(texts.join("\n\n"));
 
   var self = this;
@@ -82,6 +84,178 @@ function Speech(texts, options) {
     return ready === true && !movePending && playlist.getIndex() == index
   }
   this.gotoEnd = () => cmd$.next({name: "gotoEnd"})
+
+  //whole-page reading following what the page shows (2026-10-24): the page may rewrite its text while it's read
+  //(the DeepL extension translates what comes near the view, ~2 s after). Before a segment is made — prefetched or
+  //read — the paragraphs are read again from the page and the segments not begun yet are cut again from them; one
+  //whose paragraph the translator hasn't done yet isn't prefetched, and before it's read the translation is waited
+  //for (js/document.js gives how long). provider: refresh() -> {texts, keys, waiting, prevKeys} | null, and
+  //waitTranslated(page paragraph index)
+  this.follow = provider => {
+    cover = coverOf(paras, texts)
+    follower = cover ? provider : null
+    followVersion++
+  }
+
+  let follower = null
+  let cover = null          //for each segment, the first and last of paras it's cut from
+  let paraKeys = null       //each of paras' key on the page (element:line, js/content/html-doc.js)
+  let pageParas = null      //the page's paragraphs when last asked: {keys, waiting, at: key -> index}
+  let followVersion = 0     //changes whenever the segments or their paragraphs' places on the page may have
+  let begunIndex = -1       //the last segment begun: it and those before aren't cut again
+  let pageRanges = null
+
+  //segments are cut from the paragraphs joined with "\n\n", the separator going with the segment before: joined
+  //again they're that text, and their offsets tell the paragraphs. Null if they aren't
+  function coverOf(paraList, chunks) {
+    if (chunks.join("") != paraList.join("\n\n")) return null
+    const ends = []
+    let off = 0
+    for (let i = 0; i < paraList.length; i++) {
+      if (i) off += 2
+      off += paraList[i].length
+      ends.push(off)
+    }
+    const result = []
+    let start = 0, p = 0
+    for (const chunk of chunks) {
+      const end = start + chunk.length
+      while (p < ends.length - 1 && start >= ends[p]) p++
+      let q = p
+      while (q < ends.length - 1 && end > ends[q] + 2) q++
+      result.push([p, q])
+      start = end
+    }
+    return result
+  }
+
+  const elementOf = key => key.slice(0, key.indexOf(":") + 1)
+
+  //a paragraph's place among the page's paragraphs now; when its line moved (the element's lines changed), its
+  //element's first or last line. -1: gone
+  function pageIndexOf(p, last) {
+    if (!pageParas || !paraKeys) return p
+    const key = paraKeys[p]
+    const at = pageParas.at.get(key)
+    if (at != null) return at
+    const elem = elementOf(key)
+    return last ? pageParas.keys.findLastIndex(k => k.startsWith(elem)) : pageParas.keys.findIndex(k => k.startsWith(elem))
+  }
+
+  //for each segment, the first and last of the page's paragraphs it reads (the page highlight lights them)
+  function getPageRanges() {
+    if (!follower || !cover) return null
+    if (pageRanges && pageRanges.version == followVersion) return pageRanges.list
+    const list = cover.map(([p, q]) => {
+      const a = pageIndexOf(p, false), b = pageIndexOf(q, true)
+      return a >= 0 && b >= a ? [a, b] : null
+    })
+    pageRanges = {version: followVersion, list}
+    return list
+  }
+
+  //the page's paragraph a segment waits for (not translated yet), or null
+  function waitingPageIndex(index) {
+    if (!pageParas || !cover || !cover[index]) return null
+    for (let p = cover[index][0]; p <= cover[index][1]; p++) {
+      const i = pageIndexOf(p, false)
+      if (i >= 0 && pageParas.waiting[i]) return i
+    }
+    return null
+  }
+
+  //the page's elements segments index and index + 1 are cut from (places among the elements read): only those are
+  //read again. All of them the first time, the paragraphs' keys not known yet
+  function elementRange(index) {
+    if (!paraKeys || !cover || !cover[index]) return [null, null]
+    const elemNo = p => Number(paraKeys[p].slice(0, paraKeys[p].indexOf(":")))
+    return [elemNo(cover[index][0]), elemNo(cover[Math.min(index + 1, cover.length - 1)][1])]
+  }
+
+  //ask the page for its paragraphs and cut the segments from index on again where they changed
+  async function syncFollow(index) {
+    if (!follower || index >= texts.length) return
+    let page
+    try {
+      page = await follower.refresh(...elementRange(index))
+    }
+    catch (err) {
+      console.warn("Cannot read the page again", err)
+      return
+    }
+    if (!follower) return
+    if (!page || !page.texts || !page.keys) {
+      follower = null
+      followVersion++
+      return
+    }
+    if (!paraKeys) {
+      //the paragraphs handed out at the start, in the same order then
+      if (!page.prevKeys || page.prevKeys.length != paras.length) {
+        follower = null
+        followVersion++
+        return
+      }
+      paraKeys = page.prevKeys.slice()
+    }
+    pageParas = {keys: page.keys, waiting: page.waiting || [], at: new Map(page.keys.map((key, i) => [key, i]))}
+    followVersion++
+    recut(index, page.texts.map(text => needsPeriod.test(text) ? text + "." : text), page.keys)
+  }
+
+  //from the first segment at or after index (and after those begun) that starts a new paragraph. Inside an element
+  //partly read (a list read item by item), from its next line if it has as many lines as before (each line is the
+  //same item), else from the next element: its lines may have moved
+  function recut(index, fresh, keys) {
+    let k = Math.max(index, begunIndex + 1)
+    const count = (list, elem) => list.reduce((n, key) => n + (key.startsWith(elem) ? 1 : 0), 0)
+    const linesKept = elem => count(paraKeys, elem) == count(keys, elem)
+    const midElement = (a, b) => elementOf(paraKeys[a]) == elementOf(paraKeys[b]) && !linesKept(elementOf(paraKeys[a]))
+    while (k < texts.length && k > 0 && (cover[k][0] <= cover[k - 1][1] || midElement(cover[k][0], cover[k - 1][1]))) k++
+    if (k >= texts.length) return
+    const p0 = cover[k][0]
+    const elem = elementOf(paraKeys[p0])
+    let q0 = keys.indexOf(paraKeys[p0])
+    if (q0 < 0) q0 = keys.findIndex(key => key.startsWith(elem))
+    if (q0 < 0) return
+    const tail = fresh.slice(q0), tailKeys = keys.slice(q0)
+    const keysNow = paraKeys.slice(0, p0).concat(tailKeys)
+    if (tail.length == paras.length - p0 && tail.every((text, i) => text == paras[p0 + i])) {
+      paraKeys = keysNow
+      return
+    }
+    const chunks = tail.length ? getChunks(tail.join("\n\n")) : []
+    if (!chunks.length) return
+    const nextParas = paras.slice(0, p0).concat(tail)
+    const nextTexts = texts.slice(0, k).concat(chunks)
+    const nextCover = coverOf(nextParas, nextTexts)
+    if (!nextCover) return
+    paras = nextParas
+    paraKeys = keysNow
+    texts = nextTexts
+    cover = nextCover
+    followVersion++
+  }
+
+  //before a segment is read: its paragraphs as the page shows them now, translated if they're being. keepCurrent
+  //(read again from where it was): it stays as it was, the ones after follow
+  async function prepareToRead(index, keepCurrent) {
+    begunIndex = keepCurrent ? index : index - 1
+    await syncFollow(keepCurrent ? index + 1 : index)
+    if (keepCurrent || !follower) return
+    const waiting = waitingPageIndex(index)
+    if (waiting == null) return
+    await follower.waitTranslated(waiting).catch(err => console.warn("Cannot wait for the translation", err))
+    await syncFollow(index)
+  }
+
+  //while a segment is read: the next one as the page shows it, prefetched unless it waits for its translation
+  async function followAhead(index) {
+    await syncFollow(index + 1)
+    if (playlist.getIndex() != index || engine.prefetch == null) return
+    const next = texts[index + 1]
+    if (next && waitingPageIndex(index + 1) == null) engine.prefetch(spokenOf(next).text, options)
+  }
 
   function pickEngine() {
     if (isNaverClova(options.voice)) return naverClovaTtsEngine;
@@ -156,6 +330,9 @@ function Speech(texts, options) {
         index: playlist.getIndex()
       },
       isRTL: /^(ar|az|dv|he|iw|ku|fa|ur)\b/.test(options.lang),
+      //following the page (follow()): each segment's paragraphs on the page, and a number changing with them
+      pageRanges: getPageRanges(),
+      followVersion,
     }
   }
 
@@ -216,7 +393,7 @@ function Speech(texts, options) {
             engine.seek(cmd.index)
             return current
           } else {
-            const playback$ = playlist.seek(cmd.index, cmd.fromChar)
+            const playback$ = playlist.seek(cmd.index, cmd.fromChar, cmd.keepTs)
             return playback$ ? {playback$, ts: cmd.keepTs && current ? current.ts : Date.now()} : current
           }
         }
@@ -247,8 +424,11 @@ function Speech(texts, options) {
       if (event.type == "end") events$.next({...event, index: playlist.getIndex()})
       switch (event.type) {
         case "start": {
-          const nextText = texts[playlist.getIndex() + 1]
-          if (nextText && engine.prefetch != null) engine.prefetch(spokenOf(nextText).text, options)
+          if (follower) followAhead(playlist.getIndex()).catch(console.error)
+          else {
+            const nextText = texts[playlist.getIndex() + 1]
+            if (nextText && engine.prefetch != null) engine.prefetch(spokenOf(nextText).text, options)
+          }
           break
         }
         case "end":
@@ -283,7 +463,7 @@ function Speech(texts, options) {
       first() {
         if (0 < texts.length) {
           index = 0
-          return makePlayback(texts[index])
+          return makePlaybackAt(index)
         }
       },
       canForward() {
@@ -295,32 +475,44 @@ function Speech(texts, options) {
       forward() {
         if (index+1 < texts.length) {
           index++
-          return makePlayback(texts[index])
+          return makePlaybackAt(index)
         }
       },
       rewind() {
         if (index > 0) {
           index--
-          return makePlayback(texts[index])
+          return makePlaybackAt(index)
         }
       },
-      seek(toIndex, fromChar) {
+      seek(toIndex, fromChar, keepCurrent) {
         if (toIndex >= 0 && toIndex < texts.length) {
           index = toIndex
-          return makePlayback(texts[index], fromChar)
+          return makePlaybackAt(index, fromChar, keepCurrent)
         }
       },
       gotoEnd() {
         const toIndex = texts.length - 1
         if (toIndex >= 0) {
           index = toIndex
-          return makePlayback(texts[index])
+          return makePlaybackAt(index)
         }
       }
     }
   }
 
 
+
+  //the segment's text is taken when it's read: following the page (follow()), it may be cut again just before
+  function makePlaybackAt(index, fromChar, keepCurrent) {
+    if (!follower) return makePlayback(texts[index], fromChar)
+    const keep = keepCurrent || fromChar > 0
+    return rxjs.defer(() => rxjs.from(prepareToRead(index, keep).catch(console.error))).pipe(
+      rxjs.switchMap(() => {
+        begunIndex = Math.max(begunIndex, index)
+        return makePlayback(texts[index], fromChar)
+      })
+    )
+  }
 
   function makePlayback(text, fromChar) {
     if (engine.stop != null) return makePlaybackLegacy(text, fromChar)

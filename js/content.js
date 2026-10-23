@@ -4,7 +4,10 @@
     getRequireJs: getRequireJs,
     getDocumentInfo: getInfo,
     getCurrentIndex: getCurrentIndex,
-    getTexts: getTexts
+    getTexts: getTexts,
+    //whole-page reading following what the page shows (js/content/html-doc.js); other documents don't
+    refreshTexts: (fromElem, toElem) => readAloudDoc.refreshTexts ? readAloudDoc.refreshTexts(fromElem, toElem) : null,
+    waitTranslated: (index, timeoutMs, markWaitMs) => readAloudDoc.waitTranslated ? readAloudDoc.waitTranslated(index, timeoutMs, markWaitMs) : true,
   })
 
   function getInfo() {

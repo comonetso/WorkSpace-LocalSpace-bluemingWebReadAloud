@@ -222,9 +222,13 @@
   }
 
   //the extraction runs after the highlight session starts: redo the waiting update with the new map
+  //— or the page was read again while reading it (a translator rewrote it): lit again in place, not scrolled to
   function docMapChanged() {
+    const redrawn = docSpans != null
     docSpans = null
-    if (highlight && highlight.doc && highlight.lastMsg) applyDocHighlight(highlight.lastMsg)
+    if (highlight && highlight.doc && highlight.lastMsg) {
+      applyDocHighlight({...highlight.lastMsg, scroll: highlight.lastMsg.scroll && !redrawn})
+    }
   }
 
   //offset spans of the extracted paragraphs in their "\n\n"-joined text, with each one's element;
@@ -299,7 +303,11 @@
     highlight.lastMsg = msg
     const spans = getDocSpans()
     if (!spans) return
-    const ranges = msg.para ? docRangesFor(spans, msg.para) : []
+    //following the page (js/page-ui-host.js pageParagraphAlignment): the first and last paragraph of the map
+    const span = msg.paras && spans[msg.paras[0]] && spans[msg.paras[1]]
+      ? [spans[msg.paras[0]].start, spans[msg.paras[1]].end]
+      : msg.para
+    const ranges = span ? docRangesFor(spans, span) : []
     if (ranges.length) CSS.highlights.set(HIGHLIGHT_PARA, new Highlight(...ranges))
     else CSS.highlights.delete(HIGHLIGHT_PARA)
     //word positions aren't mapped for whole-page reading (paragraph precision only)

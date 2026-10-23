@@ -57,6 +57,7 @@ const pageUiHost = immediate(() => {
       canMute: false,
       timing: makePlaybackTiming(),
       segTexts: null,
+      followVersion: null,
       alignment: null,
       word: null,
       lastHighlight: null,
@@ -186,7 +187,8 @@ const pageUiHost = immediate(() => {
     s.word = null
     s.segTexts = null
     if (s.docHighlight && info.sourceParas) s.sourceParas = info.sourceParas
-    updateSegments(speech.getInfo().texts)
+    s.followVersion = null
+    updateSegments(speech.getInfo())
     s.subs.push(speech.state$.subscribe(onState))
     s.subs.push(speech.events$.subscribe({
       next: onSpeechEvent,
@@ -318,7 +320,7 @@ const pageUiHost = immediate(() => {
     const s = session
     if (!s || !s.speech) return
     const info = s.speech.getInfo()
-    let changed = updateSegments(info.texts)
+    let changed = updateSegments(info)
     const index = info.position.index
     if (event.type == "end") s.timing.markEnded()
     if (index != s.timing.current()) {
@@ -341,13 +343,24 @@ const pageUiHost = immediate(() => {
     pushHighlight(false)
   }
 
-  function updateSegments(texts) {
+  function updateSegments(info) {
     const s = session
-    if (!texts || texts == s.segTexts) return false
-    s.segTexts = texts
-    s.timing.setSegments(texts)
+    const texts = info.texts
+    if (!texts) return false
+    const sameTexts = texts == s.segTexts
+    if (sameTexts && info.followVersion == s.followVersion) return false
+    if (!sameTexts) {
+      //whole-page reading following the page cuts the segments not begun yet again: those before keep their time
+      const kept = s.segTexts ? commonPrefixLength(s.segTexts, texts) : 0
+      if (kept > 0) s.timing.replaceSegments(texts, kept)
+      else s.timing.setSegments(texts)
+      s.segTexts = texts
+    }
+    s.followVersion = info.followVersion
     s.alignment = null
-    if (s.sourceText || s.sourceParas) {
+    //following the page: each segment's paragraphs on it, which the page's map has in the same order
+    if (s.docHighlight && info.pageRanges) s.alignment = pageParagraphAlignment(info.pageRanges)
+    else if (s.sourceText || s.sourceParas) {
       try {
         s.alignment = s.sourceText
           ? alignSegmentsToSource(s.sourceText, texts)
@@ -415,17 +428,19 @@ const pageUiHost = immediate(() => {
     const s = session
     if (!s || !s.ports.highlight) return
     const index = s.timing.current()
-    let para = null, word = null
+    let para = null, word = null, paras = null
     if (s.alignment) {
       para = s.alignment.segmentRange(index)
+      //following the page: the first and last of the page's paragraphs, not characters
+      if (s.alignment.paragraphRange) paras = s.alignment.paragraphRange(index)
       //whole-page reading lights whole paragraphs: a word offset would light its paragraph anyway
       if (!s.docHighlight && s.word && s.word.index == index) word = s.alignment.wordRange(index, s.word.charIndex, s.word.length)
     }
-    const key = JSON.stringify([index, para, word])
+    const key = JSON.stringify([index, para, word, paras])
     if (!force && s.lastHighlight && s.lastHighlight.key == key) return
     const scroll = !s.lastHighlight || s.lastHighlight.index != index
     s.lastHighlight = {key, index}
-    post(s.ports.highlight, {type: "highlight", para, word, scroll})
+    post(s.ports.highlight, {type: "highlight", para, word, paras, scroll})
   }
 
 
@@ -505,6 +520,12 @@ function makePlaybackTiming() {
       totalChars = segs.reduce((sum, seg) => sum + seg.chars, 0)
       cur = 0
       resetSegment()
+    },
+    //the segments from kept on were cut again (whole-page reading following the page): those before keep their
+    //time, the current one goes on where it is
+    replaceSegments(texts, kept) {
+      segs = segs.slice(0, kept).concat(texts.slice(kept).map(text => ({chars: countSpokenChars(text), sec: null})))
+      totalChars = segs.reduce((sum, seg) => sum + seg.chars, 0)
     },
     onState(state) {
       const playing = state == "PLAYING"
@@ -697,6 +718,24 @@ function alignSegmentsToSource(sourceText, segTexts) {
 }
 
 //whole-page reading: the source is the extracted paragraphs themselves, and offsets refer to them
+//how many segments at the start are the same in both lists
+function commonPrefixLength(a, b) {
+  let n = 0
+  while (n < a.length && n < b.length && a[n] == b[n]) n++
+  return n
+}
+
+//whole-page reading following the page (Speech follow() in js/speech.js): each segment's first and last paragraph
+//among the page's, in the order of the page's map (js/content/html-doc.js publishDocMap) — no character mapping,
+//so a translator rewriting the paragraphs doesn't break it
+function pageParagraphAlignment(pageRanges) {
+  return {
+    segmentRange: () => null,
+    paragraphRange: index => pageRanges[index] || null,
+    wordRange: () => null,
+  }
+}
+
 //joined with "\n\n" — the page side (getDocSpans() in js/page-ui.js) counts the same way.
 //splitParagraphs: they're read like a selection (html-doc), with its wider '.' rule
 function alignSegmentsToParas(sourceParas, segTexts, splitParagraphs) {

@@ -387,30 +387,41 @@ function GoogleWavenetTtsEngine() {
   //(Speech.prepareSegment) — two, so neither pushes the other out
   var prefetched = [];
   var prefetchSeq = 0;
+  //being made ahead: a segment read before its audio is ready waits for it rather than asking for it again
+  //(2026-10-24: whole-page reading asks the page before prefetching, so short segments came to it more often)
+  var pending = [];
   this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(function() {
         const hit = prefetched.find(e => e.utterance == utterance && e.options == options)
-        return hit ? hit.url : getAudioUrl(utterance, options.voice, options.pitch);
+        if (hit) return hit.url
+        const making = pending.find(e => e.utterance == utterance && e.options == options)
+        if (making) return making.url.then(url => url != null ? url : getAudioUrl(utterance, options.voice, options.pitch))
+        return getAudioUrl(utterance, options.voice, options.pitch);
       })
     return playAudio(urlPromise, options, playbackState$)
   };
   //resolves true once speak() can use the audio, false if it couldn't be made
   this.prefetch = function(utterance, options) {
     if (prefetched.some(e => e.utterance == utterance && e.options == options)) return Promise.resolve(true)
+    const making = pending.find(e => e.utterance == utterance && e.options == options)
+    if (making) return making.url.then(url => url != null)
     const seq = ++prefetchSeq
-    return getAudioUrl(utterance, options.voice, options.pitch)
-      .then(function(url) {
-        //an earlier request for the same text finishing late doesn't replace a newer one
-        const same = prefetched.find(e => e.utterance == utterance)
-        if (same && same.seq > seq) return false
-        prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
-        return true
-      })
+    const entry = {utterance, options, url: getAudioUrl(utterance, options.voice, options.pitch)
       .catch(function(err) {
         console.error(err)
-        return false
-      })
+        return null
+      })}
+    pending.push(entry)
+    return entry.url.then(function(url) {
+      pending = pending.filter(e => e != entry)
+      if (url == null) return false
+      //an earlier request for the same text finishing late doesn't replace a newer one
+      const same = prefetched.find(e => e.utterance == utterance)
+      if (same && same.seq > seq) return false
+      prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
+      return true
+    })
   };
   this.getVoices = function() {
     return getSettings(["wavenetVoices", "gcpCreds"])
@@ -807,30 +818,39 @@ function NaverClovaTtsEngine() {
   //(Speech.prepareSegment) — two, so neither pushes the other out
   var prefetched = [];
   var prefetchSeq = 0;
+  //being made ahead: a segment read before its audio is ready waits for it rather than asking for it again
+  var pending = [];
   this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
-      .then(() => {
+      .then(async () => {
         const hit = prefetched.find(e => e.utterance == utterance && e.options == options)
-        return hit ? hit.url : getAudioUrl(utterance, options.lang, options.voice, options)
+        if (hit) return hit.url
+        const making = pending.find(e => e.utterance == utterance && e.options == options)
+        const made = making ? await making.url : null
+        return made != null ? made : getAudioUrl(utterance, options.lang, options.voice, options)
       })
     return playAudio(urlPromise, options, playbackState$)
   };
   //resolves true once speak() can use the audio, false if it couldn't be made
   this.prefetch = async function(utterance, options) {
     if (prefetched.some(e => e.utterance == utterance && e.options == options)) return true
+    const making = pending.find(e => e.utterance == utterance && e.options == options)
+    if (making) return (await making.url) != null
     const seq = ++prefetchSeq
-    try {
-      const url = await getAudioUrl(utterance, options.lang, options.voice, options)
-      //an earlier request for the same text finishing late doesn't replace a newer one
-      const same = prefetched.find(e => e.utterance == utterance)
-      if (same && same.seq > seq) return false
-      prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
-      return true
-    }
-    catch (err) {
-      console.error(err)
-      return false
-    }
+    const entry = {utterance, options, url: Promise.resolve().then(() => getAudioUrl(utterance, options.lang, options.voice, options))
+      .catch(err => {
+        console.error(err)
+        return null
+      })}
+    pending.push(entry)
+    const url = await entry.url
+    pending = pending.filter(e => e != entry)
+    if (url == null) return false
+    //an earlier request for the same text finishing late doesn't replace a newer one
+    const same = prefetched.find(e => e.utterance == utterance)
+    if (same && same.seq > seq) return false
+    prefetched = [{utterance, options, url, seq}].concat(prefetched.filter(e => e.utterance != utterance)).slice(0, 2)
+    return true
   };
   this.getVoices = async function() {
     try {

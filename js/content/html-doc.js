@@ -81,9 +81,96 @@ var readAloudDoc = new function() {
     $(toRead).addClass("read-aloud");   //for debugging only
 
     //extract texts, remembering which element each paragraph came from (page highlight)
-    var paras = toRead.flatMap(getParas).filter(function(p) {return p.text});
+    readElements = toRead;
+    var paras = lastParas = extractParas(toRead);
     publishDocMap(paras);
     return paras.map(function(p) {return p.text});
+  }
+
+  //the paragraphs of the elements to read, each keyed by its element's place among them and its line in it, so a
+  //paragraph is found again when the page rewrites its text (a translator) and the lines before it change
+  function extractParas(elements, offset) {
+    return elements.flatMap(function(elem, i) {
+      var e = (offset || 0) + i;
+      var paras = getParas(elem).filter(function(p) {return p.text});
+      //a list's items (one line each): each line is watched for its translation on its own item
+      var items = $(elem).children(":visible").get();
+      var byItem = paras.every(function(p) {return p.elem == elem}) && items.length == paras.length && paras.length > 1;
+      return paras.map(function(p, line) {
+        return {text: p.text, elem: p.elem, watch: byItem ? items[line] : p.elem, key: e + ":" + line, elemIndex: e};
+      });
+    });
+  }
+
+  //the elements chosen when the reading began (parse), read again while reading (2026-10-24): what the page
+  //shows now, translated meanwhile or not
+  var readElements = null;
+  var lastParas = null;
+
+  //fromElem..toElem (places among the elements read): only those are read again, the others as last read — reading
+  //all 800 paragraphs of a long page took a second (docs.aside.com, 2026-10-24), and it's done before every segment
+  this.refreshTexts = async function(fromElem, toElem) {
+    if (!readElements) return null;
+    const math = await getMath()
+    try {
+      if (math) math.show()
+      var before = lastParas || [];
+      var from = fromElem == null || !before.length ? 0 : Math.max(0, fromElem);
+      var to = toElem == null || !before.length ? readElements.length - 1 : Math.min(readElements.length - 1, toElem);
+      var fresh = extractParas(readElements.slice(from, to + 1), from);
+      var start = 0;
+      while (start < before.length && before[start].elemIndex < from) start++;
+      var end = start;
+      while (end < before.length && before[end].elemIndex <= to) end++;
+      var paras = before.slice(0, start).concat(fresh, before.slice(end));
+      //the keys of the paragraphs handed out before (getTexts at the start), in their order then
+      var prevKeys = before.map(function(p) {return p.key});
+      var changed = before.length != paras.length || paras.some(function(p, i) {return before[i].text != p.text});
+      lastParas = paras;
+      //the page highlight finds the new text nodes (a translator replaces them)
+      if (changed) publishDocMap(paras);
+      return {
+        texts: paras.map(function(p) {return p.text}),
+        keys: paras.map(function(p) {return p.key}),
+        waiting: paras.map(function(p) {return translationState(p.watch) != null}),
+        prevKeys: prevKeys,
+      };
+    }
+    finally {
+      if (math) math.hide()
+    }
+  }
+
+  //the DeepL extension translates what comes near the view, marking each part data-dl-translated false then true.
+  //Measured 2026-10-24: en.wikipedia.org marks the whole page at once, translated ~2 s after it's in view;
+  //docs.aside.com marks a part only once it's in view (0.3 s), translated 1.3 s after. "waiting": marked, not
+  //translated yet; "unmarked": on a page DeepL translates, not touched yet; null: nothing to wait for
+  function translationState(elem) {
+    if (!elem || !elem.isConnected) return null;
+    var waiting = '[data-dl-translated="false"]', marked = "[data-dl-translated]";
+    if (elem.closest(waiting) || elem.querySelector(waiting)) return "waiting";
+    if (!document.querySelector(marked)) return null;
+    if (elem.closest(marked) || elem.querySelector(marked)) return null;
+    return "unmarked";
+  }
+
+  //brings the paragraph into view, where the translator works, and waits until it's translated, at most
+  //timeoutMs. One DeepL hasn't marked is watched markWaitMs for a mark first: none, and it isn't one DeepL
+  //translates (code, text already in the language). True if it's no longer waiting
+  this.waitTranslated = async function(index, timeoutMs, markWaitMs) {
+    var para = lastParas && lastParas[index];
+    var elem = para && para.watch;
+    var state = translationState(elem);
+    if (!state) return true;
+    elem.scrollIntoView({block: "center"});
+    var start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await new Promise(function(fulfill) {setTimeout(fulfill, 100)});
+      state = translationState(elem);
+      if (!state) return true;
+      if (state == "unmarked" && Date.now() - start >= (markWaitMs || 0)) return true;
+    }
+    return false;
   }
 
   /**
