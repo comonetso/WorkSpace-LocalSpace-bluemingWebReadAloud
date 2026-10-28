@@ -53,13 +53,16 @@ setupDarkMode()
 
 
 async function setupDarkMode() {
-  //if extension page but not service worker
-  if (typeof brapi.commands != "undefined" && typeof window != "undefined") {
+  //if extension page but not service worker. Told by the page's address: it was by brapi.commands, gone with the
+  //browser shortcut keys (2026-10-28), which left the options page light
+  if (typeof window != "undefined" && typeof document != "undefined" && isExtensionPage()) {
     const [{darkMode}] = await Promise.all([
       getSettings(["darkMode"]),
       new Promise(f => document.addEventListener("DOMContentLoaded", f))
     ])
-    if (typeof darkMode == "boolean") {
+    //the options page goes by the browser's theme (2026-10-28); the popup by its own dark mode button, or else the theme
+    const optionsPage = /\/options\.html$/.test(location.pathname)
+    if (typeof darkMode == "boolean" && !optionsPage) {
       document.body.classList.toggle("dark-mode", darkMode)
     }
     else {
@@ -124,7 +127,7 @@ function updateSettings(items) {
 //of each voice ("rate" + voiceName) included — not the API credentials, nor the caches
 function clearSettings(names) {
   var keys = names ? Promise.resolve(names) : brapi.storage.local.get(null).then(function(items) {
-    return ["voiceName", "rate", "speedStep", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip", "uiLanguage"]
+    return ["voiceName", "rate", "speedStep", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode", "selectionButton", "iconOpensPopup", "googleSlidesAutoFlip", "uiLanguage", "readingKeys"]
       .concat(Object.keys(items).filter(function(key) { return /^rate./.test(key) }))
   })
   return keys.then(function(keys) {
@@ -156,41 +159,143 @@ function observeSetting(name) {
 }
 
 //the speed is picked on the page bar (js/page-ui.js) from a list, every 0.1 or every 0.25 as chosen in the
-//options (2026-10-24). A saved speed not in the list goes to the nearest one, the faster on a tie
+//options, as in the Paseo status bar plugin (2026-10-28: thinkingPlayer.ts normalizeRate, rateOptions):
+//0.5x to 2x every 0.1, 0.5x to 5x every 0.25, counted from 1x. The list shows 1x and up; a speed under 1x
+//(only reached with Ctrl+↓) is shown as one more place before them
 var speedLists = {
-  "0.1": {from: 0.7, to: 2.0},
-  "0.25": {from: 0.5, to: 3.0},
+  "0.1": {max: 2},
+  "0.25": {max: 5},
 }
 
 function speedStepOf(step) {
   return speedLists[step] ? Number(step) : defaults.speedStep
 }
 
-function speedList(step) {
+//a speed on the steps from 1x, within 0.5x and the step's top (1.25 is between 1.2 and 1.3, so 1.3)
+function normalizeRate(rate, step) {
   step = speedStepOf(step)
-  var range = speedLists[step]
-  var count = Math.round((range.to - range.from) / step)
+  var max = speedLists[step].max
+  var bounded = Math.max(0.5, Math.min(max, isFinite(rate) && rate > 0 ? rate : 1))
+  return Number(Math.max(0.5, Math.min(max, 1 + Math.round((bounded - 1) / step) * step)).toFixed(2))
+}
+
+function speedList(step, rate) {
+  step = speedStepOf(step)
+  var count = Math.round((speedLists[step].max - 1) / step)
   var list = []
-  for (var i = 0; i <= count; i++) list.push(Number((range.from + i * step).toFixed(2)))
+  for (var i = 0; i <= count; i++) list.push(Number((1 + i * step).toFixed(2)))
+  if (rate < 1) list.unshift(normalizeRate(rate, step))
   return list
 }
 
-//in thousandths, as speeds are saved: 1.25 is exactly between 1.2 and 1.3, so 1.3
-function nearestSpeed(rate, list) {
-  var distance = function(value) { return Math.abs(Math.round(value * 1000) - Math.round(rate * 1000)) }
-  return list.reduce(function(best, value) {
-    return distance(value) < distance(best) || (distance(value) == distance(best) && value > best) ? value : best
-  })
+//one speed for all voices (2026-10-28, as in the Paseo plugin). It was saved per voice ("rate" + voice name):
+//the first time, the speed of the voice in use is taken as the one
+async function getListedRate(voiceName) {
+  var settings = await getSettings(["rate", "rateMerged", "speedStep"])
+  var saved = settings.rate
+  if (!settings.rateMerged) {
+    var key = "rate" + (voiceName || "")
+    if (voiceName) saved = (await getSettings([key]))[key] || saved
+    await updateSettings({rateMerged: true})
+  }
+  var rate = normalizeRate(saved || defaults.rate, settings.speedStep)
+  if (rate != settings.rate) await updateSetting("rate", rate)
+  return rate
 }
 
-//a voice's speed as read and shown: the saved one moved into the list, and saved again if it moved
-async function getListedRate(voiceName) {
-  var key = "rate" + (voiceName || "")
-  var settings = await getSettings([key, "speedStep"])
-  var saved = settings[key]
-  var rate = nearestSpeed(saved || defaults.rate, speedList(settings.speedStep))
-  if (saved && saved != rate) await updateSetting(key, rate)
-  return rate
+//keys taken on the page while the page bar is up (js/page-ui.js), as in the Paseo plugin (2026-10-28,
+//shared/shortcuts.ts): while reading all five, while paused only pause/resume, and none once the bar is gone.
+//Changed in the options, saved as "readingKeys" (id → key). A key is "Ctrl+Alt+Shift+Meta+<KeyboardEvent.code>"
+//in that order: the code, not the key, so it's the same place on a Korean keyboard and with Alt
+var readingKeyList = [
+  {id: "read-pause", defaultCombo: "Ctrl+Space"},
+  {id: "read-prev", defaultCombo: "Ctrl+ArrowLeft"},
+  {id: "read-next", defaultCombo: "Ctrl+ArrowRight"},
+  {id: "read-slower", defaultCombo: "Ctrl+ArrowDown"},
+  {id: "read-faster", defaultCombo: "Ctrl+ArrowUp"},
+]
+
+var MODIFIER_CODES = /^(Control|Shift|Alt|Meta|OS)(Left|Right)?$/
+
+function parseCombo(text) {
+  var parts = String(text || "").split("+")
+  var code = parts.pop() || ""
+  if (!code || MODIFIER_CODES.test(code)) return null
+  if (parts.some(function(m) { return ["Ctrl", "Alt", "Shift", "Meta"].indexOf(m) < 0 })) return null
+  return {ctrl: parts.indexOf("Ctrl") >= 0, alt: parts.indexOf("Alt") >= 0, shift: parts.indexOf("Shift") >= 0, meta: parts.indexOf("Meta") >= 0, code: code}
+}
+
+//a key pressed → its combo, null for a modifier alone
+function comboOfKey(event) {
+  if (!event.code || MODIFIER_CODES.test(event.code)) return null
+  return [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", event.code].filter(Boolean).join("+")
+}
+
+var COMBO_LABELS = {
+  Comma: ",", Period: ".", Slash: "/", Semicolon: ";", Quote: "'", BracketLeft: "[", BracketRight: "]", Backslash: "\\",
+  Minus: "-", Equal: "=", Backquote: "`", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Escape: "Esc", Space: "Space",
+}
+
+//as shown: "Ctrl+←", "Ctrl+Space", "Ctrl+Alt+F"
+function formatCombo(text) {
+  var c = parseCombo(text)
+  if (!c) return String(text || "")
+  var key = /^Key[A-Z]$/.test(c.code) ? c.code.slice(3) : /^Digit\d$/.test(c.code) ? c.code.slice(5) : (COMBO_LABELS[c.code] || c.code)
+  return [c.ctrl && "Ctrl", c.alt && "Alt", c.shift && "Shift", c.meta && "Meta", key].filter(Boolean).join("+")
+}
+
+//the keys in use: a saved one if it can be read, else the default
+function readingKeyCombos(saved) {
+  var combos = {}
+  readingKeyList.forEach(function(k) {
+    var custom = saved && saved[k.id]
+    combos[k.id] = custom && parseCombo(custom) ? custom : k.defaultCombo
+  })
+  return combos
+}
+
+//a selection read by dragging (js/player.js playText) goes on by paragraphs, a paragraph ending at an empty line
+//as in the Paseo plugin (2026-10-28, thinkingPlayer.ts splitParagraphs; it was every line before). Its lines,
+//spaces around them left out, each get a '.' when they don't end in punctuation, so a heading or a list item isn't
+//read on into the next line. Replayed for the highlight (js/page-ui-host.js alignSegmentsToSource)
+var SELECTION_NEEDS_PERIOD = /[^\s.!?,;:…。！？、，；：]$/
+
+//the lines of a selection, with where they start in it and whether an empty line comes before (empty lines left out)
+function selectionLines(text) {
+  var lines = [], separator = /\s*\r?\n\s*/g
+  var last = 0, match, newParagraph = false
+  var push = function(end) {
+    if (end > last) lines.push({text: text.slice(last, end), offset: last, newParagraph: newParagraph || !lines.length})
+  }
+  while ((match = separator.exec(text))) {
+    push(match.index)
+    if ((match[0].match(/\n/g) || []).length >= 2) newParagraph = true
+    else if (match.index > last) newParagraph = false
+    last = match.index + match[0].length
+  }
+  push(text.length)
+  return lines
+}
+
+function selectionParagraphs(text) {
+  var paragraphs = []
+  selectionLines(text).forEach(function(line) {
+    var said = SELECTION_NEEDS_PERIOD.test(line.text) ? line.text + "." : line.text
+    if (line.newParagraph) paragraphs.push(said)
+    else paragraphs[paragraphs.length - 1] += "\n" + said
+  })
+  return paragraphs
+}
+
+//two reading keys the same: the first such pair (saving is refused)
+function readingKeyConflict(combos) {
+  var seen = {}
+  for (var i = 0; i < readingKeyList.length; i++) {
+    var id = readingKeyList[i].id, combo = combos[id]
+    if (seen[combo]) return [seen[combo], id]
+    seen[combo] = id
+  }
+  return null
 }
 
 
@@ -517,7 +622,12 @@ function ajaxPost(sUrl, oData, sType) {
       body: sType == "json" ? JSON.stringify(oData) : urlEncode(oData)
     })
     .then(res => {
-      if (!res.ok) throw new Error(getMessage("error_server_status", [String(res.status)]))
+      if (!res.ok) {
+        //the status kept, for an engine to tell a refused request (400) from the others
+        const err = new Error(getMessage("error_server_status", [String(res.status)]))
+        err.status = res.status
+        throw err
+      }
       return res.text()
     })
 }
@@ -635,10 +745,6 @@ function escapeHtml(text) {
 }
 
 //the browser's page for the extension's shortcuts (Chrome and Whale: the manifest is Chrome MV3 only)
-function getHotkeySettingsUrl() {
-  return 'chrome://extensions/configureCommands';
-}
-
 function StateMachine(states) {
   if (!states.IDLE) throw new Error("Missing IDLE state");
   var currentStateName = "IDLE";

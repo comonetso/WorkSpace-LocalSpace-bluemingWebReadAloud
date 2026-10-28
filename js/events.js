@@ -226,35 +226,9 @@ async function readSelectionInTab(tab, frameId, fallbackText) {
 }
 
 
-/**
- * Shortcut keys handlers
- */
-if (brapi.commands)
-brapi.commands.onCommand.addListener(function(command) {
-  if (command == "play") {
-    getPlaybackState()
-      .then(function(stateInfo) {
-        switch (stateInfo.state) {
-          case "PLAYING": return pause()
-          case "PAUSED": return resume()
-          case "STOPPED": return playTab()
-        }
-      })
-      .catch(handleHeadlessError)
-  }
-  else if (command == "stop") {
-    stop()
-      .catch(handleHeadlessError)
-  }
-  else if (command == "forward") {
-    forward()
-      .catch(handleHeadlessError)
-  }
-  else if (command == "rewind") {
-    rewind()
-      .catch(handleHeadlessError)
-  }
-})
+//no browser shortcut keys (2026-10-28: Alt+P, Alt+O, Alt+comma and Alt+period removed, as they take the keys even
+//when nothing is read). Reading starts from the icon, the context menu or the selection button; while reading, the
+//page bar takes its own keys (js/page-ui.js)
 
 
 /**

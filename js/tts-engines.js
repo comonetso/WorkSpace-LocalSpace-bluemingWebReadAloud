@@ -510,6 +510,13 @@ function GoogleWavenetTtsEngine() {
     "sk": "Slovak", "sl": "Slovene", "sr": "Serbian", "sv": "Swedish", "sw": "Swahili", "ta": "Tamil", "te": "Telugu",
     "th": "Thai", "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese",
   }
+  //the UTF-8 size of the request for a text, its pause markup counted: kept within 2000 bytes by js/speech.js
+  //getChunks, as in the Paseo plugin (tts.ts INPUT_CHUNK_BYTES: a 4981-byte request took over 30s)
+  var utf8 = new TextEncoder();
+  this.requestBytes = function(text, voice) {
+    var matches = voice.voiceName.match(/^Google(\S+) .* \((\w+)\)$/);
+    return utf8.encode(matches && pausesMarkup(text, voice, matches[1]) || text).length;
+  }
   function getAudioUrl(text, voice, pitch) {
     assert(text && voice);
     var matches = voice.voiceName.match(/^Google(\S+) .* \((\w+)\)$/);
@@ -539,8 +546,10 @@ function GoogleWavenetTtsEngine() {
             })
         }
         const markup = pausesMarkup(text, voice, voiceType)
-        //if the pauses are refused, it's read without them rather than not at all
+        //if the pauses are refused (400), it's read without them rather than not at all. Other failures (the key,
+        //the quota, the network) fail at once, as in the Paseo plugin (tts.ts synthesizeVoice)
         return markup ? synthesize({markup: markup}).catch(function(err) {
+          if (err.status != 400) throw err;
           console.error(err);
           return synthesize({text: text});
         }) : synthesize({text: text});
@@ -551,10 +560,10 @@ function GoogleWavenetTtsEngine() {
       })
   }
   //Korean Chirp 3 HD voices hardly pause at a comma (0.29s: less than between two clauses without one), so a short
-  //pause is asked for after each comma of a sentence ("[pause short]" in markup: 0.41s, chosen by ear 2026-09-26).
-  //Nor much at an arrow, made a full stop and an em space by js/spoken-text.js (0.25-0.5s after short words, like
-  //the comma's): a pause is asked for there ("[pause]": 0.75-0.9s, chosen by ear 2026-09-27).
-  //The text's own brackets become parentheses, so that none is taken for a tag. Null where it doesn't apply
+  //pause is asked for after each comma of a sentence ("[pause short]" in markup: 0.41s, chosen by ear 2026-09-26),
+  //and a pause at an em space ("[pause]"), as in the Paseo plugin (tts.ts pausesMarkup; js/spoken-text.js no longer
+  //makes one for an arrow, 2026-10-28). The text's own brackets become parentheses, so that none is taken for a tag.
+  //Null where it doesn't apply
   function pausesMarkup(text, voice, voiceType) {
     if (voiceType != "Chirp3-HD" || !/^ko/i.test(voice.lang) || !/,\s| /.test(text)) return null;
     return text.replace(/\[/g, "(").replace(/\]/g, ")").replace(/,(?=\s)/g, ", [pause short]").replace(/ /g, " [pause] ");

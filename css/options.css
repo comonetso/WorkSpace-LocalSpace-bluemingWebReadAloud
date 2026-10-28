@@ -155,6 +155,25 @@ input[type=checkbox] + label {
 .dark-mode .btn-light.active {
   background-color: #4e4e4e;
 }
+/*the selects dark too (2026-10-28), in the colors of the buttons; the browser draws their arrows, open lists and the
+scroll bar dark*/
+.dark-mode {
+  color-scheme: dark;
+}
+.dark-mode .form-control,
+.dark-mode .form-control:focus {
+  background-color: #3e3e3e;
+  border-color: #555;
+  color: #ddd;
+}
+.dark-mode .form-control:focus {
+  border-color: #888;
+}
+.dark-mode .form-control option,
+.dark-mode .form-control optgroup {
+  background-color: #3e3e3e;
+  color: #ddd;
+}
 
 .btn-info {
   color: white;
@@ -194,18 +213,27 @@ input[type=checkbox] + label {
   margin-top: 1em;
 }
 
+/*the reading keys open under their button (2026-10-28): the page keeps its height until then*/
+#reading-keys {
+  display: none;
+}
+#reading-keys.open {
+  display: block;
+}
+.key-button {
+  min-width: 12em;
+  text-align: left;
+}
+.key-button.waiting {
+  font-style: italic;
+}
+.key-button.refused {
+  color: #c2410c;
+}
+
 #rate-warning {
   color: blue;
   display: none;
-}
-
-#hotkeys-link {
-  color: gray;
-  cursor: pointer;
-  text-decoration: underline;
-}
-.dark-mode #hotkeys-link {
-  color: #999;
 }
 
 .spinner {

@@ -16,6 +16,11 @@ const pageUiHost = immediate(() => {
   //a step changed in the options while reading: the bar takes the new list and the speed moves into it now
   brapi.storage.onChanged.addListener(changes => {
     if (changes.speedStep) onSpeedStep(changes.speedStep.newValue)
+    //the reading keys changed in the options: the bar takes them now
+    if (changes.readingKeys && session) {
+      session.keys = barKeys(changes.readingKeys.newValue)
+      pushBar()
+    }
   })
 
   return {
@@ -202,9 +207,11 @@ const pageUiHost = immediate(() => {
   //rate/pitch/volume as saved, read the same way as getSpeech() in js/document.js, and the bar's speed list
   //(a step changed while reading: onSpeedStep)
   async function loadParams(s) {
-    const settings = await getSettings(["voiceName", "pitch", "volume", "speedStep"])
+    const settings = await getSettings(["voiceName", "pitch", "volume", "speedStep", "readingKeys"])
     const rate = await getListedRate(settings.voiceName)
-    s.speeds = speedList(settings.speedStep)
+    s.keys = barKeys(settings.readingKeys)
+    s.step = speedStepOf(settings.speedStep)
+    s.speeds = speedList(s.step, rate)
     s.params = {
       rate,
       pitch: settings.pitch || defaults.pitch,
@@ -215,8 +222,7 @@ const pageUiHost = immediate(() => {
 
   //from the bar's settings panel: save like the options page does, then apply to what's being read
   async function applyParams(s, params) {
-    const settings = await getSettings(["voiceName"])
-    if (params.rate != null) await updateSetting("rate" + (settings.voiceName || ""), Number(params.rate.toFixed(3)))
+    if (params.rate != null) await updateSetting("rate", Number(params.rate.toFixed(3)))
     const shared = {}
     if (params.pitch != null) shared.pitch = params.pitch
     if (params.volume != null) shared.volume = params.volume
@@ -226,6 +232,8 @@ const pageUiHost = immediate(() => {
     const applied = {}
     for (const key in params) applied[key] = params[key] || defaults[key]
     s.params = {...s.params, ...applied}
+    //a speed under 1x is one more place on the list (js/defaults.js speedList)
+    if (applied.rate != null && s.step) s.speeds = speedList(s.step, applied.rate)
     const speech = s.speech
     if (speech && speech.appliesParamsLive) {
       const inPlace = {}, remade = {}
@@ -263,19 +271,20 @@ const pageUiHost = immediate(() => {
   function onSpeedStep(step) {
     const s = session
     if (!s || !s.params) return
-    s.speeds = speedList(step)
-    const rate = nearestSpeed(s.params.rate, s.speeds)
+    s.step = speedStepOf(step)
+    const rate = normalizeRate(s.params.rate, s.step)
+    s.speeds = speedList(s.step, rate)
     if (rate != s.params.rate) applyParams(s, {rate}).catch(console.error)
     else pushBar()
   }
 
-  //Ctrl+←/→ on the page (js/page-ui.js): one place along the bar's list, staying put at its ends. Counted
-  //from the speed last asked for, so quick presses don't land on the same place before the first is applied
+  //the slower/faster keys on the page (js/page-ui.js): one step, down to 0.5x and up to the step's top, as in
+  //the Paseo plugin (thinkingPlayer.ts stepSpeed). Counted from the speed last asked for, so quick presses don't
+  //land on the same place before the first is applied
   function stepSpeed(s, dir) {
-    if (!s.speeds || !s.params) return
+    if (!s.step || !s.params) return
     const from = s.askedRate != null ? s.askedRate : s.params.rate
-    const index = s.speeds.indexOf(nearestSpeed(from, s.speeds))
-    const rate = s.speeds[Math.max(0, Math.min(s.speeds.length - 1, index + (dir < 0 ? -1 : 1)))]
+    const rate = normalizeRate(from + (dir < 0 ? -1 : 1) * s.step, s.step)
     if (rate == from) return
     s.askedRate = rate
     return applyParams(s, {rate}).finally(() => {
@@ -402,6 +411,14 @@ const pageUiHost = immediate(() => {
 
   //outgoing UI updates ----------------------------------------------------------
 
+  //the reading keys as the page bar matches them (js/defaults.js readingKeyList): id → {ctrl, alt, shift, meta, code}
+  function barKeys(saved) {
+    const combos = readingKeyCombos(saved)
+    const keys = {}
+    for (const id in combos) keys[id] = parseCombo(combos[id])
+    return keys
+  }
+
   function pushBar() {
     const s = session
     if (!s || !s.ports.bar) return
@@ -419,6 +436,8 @@ const pageUiHost = immediate(() => {
       params: s.params,
       //the bar's speed list, picked next to the close button
       speeds: s.speeds,
+      //the reading keys, taken on the page while the bar is up
+      keys: s.keys,
       //voices that ignore the pitch get no pitch slider
       usesPitch: s.speech ? s.speech.usesPitch : true,
     })
@@ -704,17 +723,11 @@ function countSpokenChars(text) {
  * against it in order. If anything doesn't line up, returns null and the page shows no highlight.
  */
 function alignSegmentsToSource(sourceText, segTexts) {
-  //selections: playText() splits them at every line break (splitParagraphs)
-  const separator = /\s*\r?\n\s*/g
-  const paragraphs = []
-  let last = 0, match
-  while ((match = separator.exec(sourceText))) {
-    paragraphs.push({text: sourceText.slice(last, match.index), offset: last})
-    last = match.index + match[0].length
-  }
-  paragraphs.push({text: sourceText.slice(last), offset: last})
-  //the '.' rule of Speech() in js/speech.js for a selection (splitParagraphs)
-  return alignParagraphs(paragraphs, /[^\s.!?,;:…。！？、，；：]$/, segTexts)
+  //selections: playText() reads them by paragraphs ending at empty lines, a paragraph's lines joined with "\n"
+  //and each closed with a '.' (js/defaults.js selectionParagraphs)
+  const paragraphs = selectionLines(sourceText).map((line, i) =>
+    ({text: line.text, offset: line.offset, joiner: i == 0 ? "" : line.newParagraph ? "\n\n" : "\n"}))
+  return alignParagraphs(paragraphs, SELECTION_NEEDS_PERIOD, segTexts)
 }
 
 //whole-page reading: the source is the extracted paragraphs themselves, and offsets refer to them
@@ -773,10 +786,10 @@ function alignParagraphs(paragraphs, needsPeriod, segTexts) {
       text += "."
       src.push(-1)
     }
-    if (i > 0) {
-      joined += "\n\n"
-      joinedSrc.push(-1, -1)
-    }
+    //paragraphs are joined with "\n\n" (Speech() in js/speech.js), a selection's lines in a paragraph with "\n"
+    const joiner = paragraphs[i].joiner != null ? paragraphs[i].joiner : i > 0 ? "\n\n" : ""
+    joined += joiner
+    for (let k = 0; k < joiner.length; k++) joinedSrc.push(-1)
     joined += text
     joinedSrc = joinedSrc.concat(src)
   }

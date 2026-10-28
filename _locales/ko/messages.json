@@ -23,6 +23,33 @@
   "options_enable_custom_voices": {
     "message": "API key로 음성 추가…"
   },
+  "options_reading_keys_button": {
+    "message": "단축키 바꾸기"
+  },
+  "options_reading_keys_note": {
+    "message": "읽는 동안(재생 바가 떠 있을 때)만 페이지에서 받습니다. 멈춘 동안에는 멈춤 / 다시 읽기만."
+  },
+  "options_reading_key_pause": {
+    "message": "멈춤 / 다시 읽기"
+  },
+  "options_reading_key_prev": {
+    "message": "이전 문단"
+  },
+  "options_reading_key_next": {
+    "message": "다음 문단"
+  },
+  "options_reading_key_slower": {
+    "message": "느리게"
+  },
+  "options_reading_key_faster": {
+    "message": "빠르게"
+  },
+  "options_reading_key_waiting": {
+    "message": "키를 누르세요… (Esc: 취소)"
+  },
+  "options_reading_key_conflict": {
+    "message": "이미 \"$1\"에 쓰는 키입니다."
+  },
   "options_rate_step_label": {
     "message": "속도 간격"
   },
@@ -55,9 +82,6 @@
   },
   "options_audio_playback_embedded": {
     "message": "페이지 안에서"
-  },
-  "options_hotkeys_link": {
-    "message": "단축키 설정"
   },
   "options_test_button": {
     "message": "미리 듣기"
@@ -187,18 +211,6 @@
   },
   "options_ui_language_auto": {
     "message": "자동 (브라우저 언어)"
-  },
-  "command_play": {
-    "message": "재생 / 일시정지"
-  },
-  "command_stop": {
-    "message": "정지"
-  },
-  "command_forward": {
-    "message": "다음 단락"
-  },
-  "command_rewind": {
-    "message": "이전 단락"
   },
   "options_page_title": {
     "message": "Blueming Web Read Aloud 설정"

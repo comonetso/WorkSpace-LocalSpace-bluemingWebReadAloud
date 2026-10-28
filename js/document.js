@@ -5,6 +5,8 @@ function SimpleSource(texts, opts) {
     lang: opts.lang,
     singlePage: true,
     splitParagraphs: opts.splitParagraphs,
+    //a selection read by dragging (js/player.js playText): its paragraphs aren't joined even when short (js/speech.js)
+    selection: !!opts.splitParagraphs,
   })
   this.isWaiting = function() {
     return false;
@@ -305,6 +307,7 @@ function Doc(source, onEnd) {
       volume: settings.volume || defaults.volume,
       lang: config.langMap[lang] || lang || 'en-US',
       splitParagraphs: !!info.splitParagraphs,
+      selection: !!info.selection,
     }
     const voice = await getSpeechVoice(settings.voiceName, options.lang)
     if (!voice) throw new Error(JSON.stringify({code: "error_no_voice", lang: options.lang}));

@@ -23,6 +23,33 @@
   "options_enable_custom_voices": {
     "message": "Add voices with an API key…"
   },
+  "options_reading_keys_button": {
+    "message": "Change shortcuts"
+  },
+  "options_reading_keys_note": {
+    "message": "Taken on the page only while reading (the bar is up). While paused, only pause / resume."
+  },
+  "options_reading_key_pause": {
+    "message": "Pause / resume"
+  },
+  "options_reading_key_prev": {
+    "message": "Previous paragraph"
+  },
+  "options_reading_key_next": {
+    "message": "Next paragraph"
+  },
+  "options_reading_key_slower": {
+    "message": "Slower"
+  },
+  "options_reading_key_faster": {
+    "message": "Faster"
+  },
+  "options_reading_key_waiting": {
+    "message": "Press the keys… (Esc: cancel)"
+  },
+  "options_reading_key_conflict": {
+    "message": "That key is already used for \"$1\"."
+  },
   "options_rate_step_label": {
     "message": "Speed step"
   },
@@ -55,9 +82,6 @@
   },
   "options_audio_playback_embedded": {
     "message": "In page"
-  },
-  "options_hotkeys_link": {
-    "message": "Edit shortcut keys"
   },
   "options_test_button": {
     "message": "Test"
@@ -187,18 +211,6 @@
   },
   "options_ui_language_auto": {
     "message": "Automatic (browser language)"
-  },
-  "command_play": {
-    "message": "Play / pause"
-  },
-  "command_stop": {
-    "message": "Stop"
-  },
-  "command_forward": {
-    "message": "Next paragraph"
-  },
-  "command_rewind": {
-    "message": "Previous paragraph"
   },
   "options_page_title": {
     "message": "Blueming Web Read Aloud Options"

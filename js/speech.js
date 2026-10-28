@@ -2,7 +2,12 @@ function Speech(texts, options) {
   options.rate = (options.rate || 1) * (isGoogleNative(options.voice) ? 0.9 : 1);
   //Google native voices get a safety end timeout that suits chunks cut for this rate (getChunks)
   const GOOGLE_NATIVE_END_TIMEOUT = 16*1000
+  //a request to Google's voices (fitBytes)
+  const GOOGLE_REQUEST_BYTES = 2000
   const chunkRate = options.rate
+  //paragraphs kept apart (CharBreaker): a selection's every one (2026-10-28, as in the Paseo plugin — short ones were
+  //joined to the next before), a page read by its lines (html-doc) all but short ones
+  const keepApart = options.splitParagraphs && (options.selection ? "all" : "short")
 
   //a paragraph gets a '.' at its end so the voice pauses there (line breaks don't make it pause). A selection's lines
   //(splitParagraphs), which may be read together (CharBreaker), get it whenever they don't end in punctuation
@@ -296,11 +301,24 @@ function Speech(texts, options) {
     }
     else {
       if (isGoogleTranslate(options.voice)) {
-        return fitSpoken(new CharBreaker(200, punctuator, null, options.splitParagraphs).breakText(text),
-          text => text.length, 200, limit => new CharBreaker(limit, punctuator, null, options.splitParagraphs));
+        return fitSpoken(new CharBreaker(200, punctuator, null, keepApart).breakText(text),
+          text => text.length, 200, limit => new CharBreaker(limit, punctuator, null, keepApart));
       }
-      else return new CharBreaker(750, punctuator, 200, options.splitParagraphs).breakText(text);
+      var chunks = new CharBreaker(750, punctuator, 200, keepApart).breakText(text);
+      return isGoogleWavenet(options.voice) ? fitBytes(chunks, GOOGLE_REQUEST_BYTES, punctuator) : chunks;
     }
+  }
+
+  //a request to Google's voices is kept within 2000 bytes, its pause markup counted, as in the Paseo plugin (2026-10-28,
+  //tts.ts INPUT_CHUNK_BYTES); a segment over it is broken again, smaller, on the same breaks
+  function fitBytes(chunks, limit, punctuator) {
+    const bytes = text => googleWavenetTtsEngine.requestBytes(spokenText(text).text, options.voice)
+    return chunks.flatMap(chunk => {
+      const size = bytes(chunk)
+      if (size <= limit || chunk.length < 2) return [chunk]
+      const smaller = Math.max(1, Math.min(chunk.length - 1, Math.floor(chunk.length * limit / size)))
+      return fitBytes(new CharBreaker(smaller, punctuator, null, keepApart).breakText(chunk), limit, punctuator)
+    })
   }
 
   //the voice is given the spoken text (spokenText), which can be longer than the segment. Where the engine takes only
@@ -630,9 +648,9 @@ function Speech(texts, options) {
   }
 
   function CharBreaker(charLimit, punctuator, paragraphCombineThreshold, keepParagraphsApart) {
-    //keepParagraphsApart (reading a selection) reads every line on its own, except that lines this short
-    //(spaces not counted) go with the next: they're over before the next segment's audio is made, leaving a gap.
-    //Counted in UTF-8 bytes: 20 Korean characters (3 bytes each), or 60 English ones
+    //keepParagraphsApart: "all" (a selection) reads every paragraph on its own; "short" (a page read by its lines)
+    //too, except that lines this short (spaces not counted) go with the next: they're over before the next segment's
+    //audio is made, leaving a gap. Counted in UTF-8 bytes: 20 Korean characters (3 bytes each), or 60 English ones
     var SHORT_LINE_BYTES = 60;
     var utf8 = new TextEncoder();
     this.breakText = breakText;
@@ -674,7 +692,7 @@ function Speech(texts, options) {
         }
         else {
           var full = keepApart
-            ? group.spokenBytes > SHORT_LINE_BYTES || group.charCount + charCount > charLimit
+            ? (keepApart == "all" ? group.parts.length > 0 : group.spokenBytes > SHORT_LINE_BYTES) || group.charCount + charCount > charLimit
             : group.charCount + charCount > (combineThreshold || charLimit);
           if (full) flush();
           group.parts.push(part);

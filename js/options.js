@@ -32,16 +32,6 @@
 
 
 
-  //hotkey
-  domReadyPromise
-    .then(() => {
-      $("#hotkeys-link").click(function () {
-        brapi.tabs.create({ url: getHotkeySettingsUrl() });
-      });
-    })
-
-
-
   //voice
   domReadyPromise
     .then(() => {
@@ -85,7 +75,7 @@
 
 
   //rate: picked on the page bar from a list (js/page-ui.js); only the list's step is picked here (2026-10-24,
-  //the slider and the typed value removed). A new step moves the voice's speed into the new list right away
+  //the slider and the typed value removed). A new step moves the speed onto the new steps right away
   //(1.25 every 0.25 is 1.3 every 0.1); a reading going on takes the new list and speed now (js/page-ui-host.js
   //onSpeedStep)
   domReadyPromise
@@ -102,12 +92,80 @@
   rxjs.combineLatest([observeSetting("speedStep"), domReadyPromise])
     .subscribe(([step]) => $("#rate-step").val(String(speedStepOf(step))))
 
-  const rateObservable = observeSetting("voiceName")
-    .pipe(
-      rxjs.switchMap(voiceName => observeSetting("rate" + (voiceName || "")))
-    )
+  //the reading keys (2026-10-28, js/defaults.js readingKeyList): under a button, so the page keeps its height (the
+  //browser's options dialog is barely tall enough). A key box waits for the keys pressed and saves them; Esc leaves
+  //it as it was, and a key another reading key uses isn't saved
+  const readingKeyNames = {
+    "read-pause": "options_reading_key_pause", "read-prev": "options_reading_key_prev", "read-next": "options_reading_key_next",
+    "read-slower": "options_reading_key_slower", "read-faster": "options_reading_key_faster",
+  }
+  let readingKeysSaved, waitingKey = null, keySavedAt = 0
+  const readingKeysListed = domReadyPromise.then(() => uiLanguageReady).then(() => {
+    $("#reading-keys-button").click(() => $("#reading-keys").toggleClass("open"))
+    const list = $("#reading-keys-list")
+    for (const {id} of readingKeyList) {
+      list.append($("<span>").text(getMessage(readingKeyNames[id])),
+        $("<div>").append($("<button type='button' class='btn btn-sm btn-light key-button'>").attr("data-key", id)))
+    }
+    list.on("click", ".key-button", function() {
+      //the Space or Enter just taken as a key also clicks the box: not waiting again
+      if (Date.now() - keySavedAt < 500) return
+      waitingKey = $(this).attr("data-key")
+      $("#reading-keys-status").text("")
+      showReadingKeys()
+    })
+    list.on("keydown", ".key-button", function(event) {
+      if (waitingKey != $(this).attr("data-key")) return
+      const e = event.originalEvent
+      event.preventDefault()
+      event.stopPropagation()
+      if (e.isComposing) return
+      if (e.key == "Escape" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) return stopWaiting()
+      const combo = comboOfKey(e)
+      if (!combo) return
+      const combos = {...readingKeyCombos(readingKeysSaved), [waitingKey]: combo}
+      const conflict = readingKeyConflict(combos)
+      keySavedAt = Date.now()
+      if (conflict) {
+        //said in the key box itself, for a while: the line under the boxes may be out of view in the options dialog
+        const other = conflict[0] == waitingKey ? conflict[1] : conflict[0]
+        const said = getMessage("options_reading_key_conflict", [getMessage(readingKeyNames[other])])
+        const box = $(this)
+        $("#reading-keys-status").text(said)
+        waitingKey = null
+        box.removeClass("waiting").addClass("refused").text(said)
+        setTimeout(() => { box.removeClass("refused"); showReadingKeys() }, 2500)
+        return
+      }
+      waitingKey = null
+      updateSettings({ readingKeys: combos }).then(showConfirmation)
+    })
+    list.on("blur", ".key-button", () => stopWaiting())
+  })
 
-  rxjs.combineLatest([observeSetting("voiceName"), rateObservable, domReadyPromise])
+  rxjs.combineLatest([observeSetting("readingKeys"), readingKeysListed])
+    .subscribe(([saved]) => {
+      readingKeysSaved = saved
+      showReadingKeys()
+    })
+
+  function showReadingKeys() {
+    const combos = readingKeyCombos(readingKeysSaved)
+    $("#reading-keys-list .key-button").each(function() {
+      const id = $(this).attr("data-key")
+      $(this).toggleClass("waiting", id == waitingKey)
+        .text(id == waitingKey ? getMessage("options_reading_key_waiting") : formatCombo(combos[id]))
+    })
+  }
+
+  function stopWaiting() {
+    if (waitingKey == null) return
+    waitingKey = null
+    showReadingKeys()
+  }
+
+  //one speed for all voices (js/defaults.js getListedRate)
+  rxjs.combineLatest([observeSetting("voiceName"), observeSetting("rate"), domReadyPromise])
     .subscribe(([voiceName, rate]) => {
       $("#rate-warning").toggle((!voiceName || isNativeVoice({ voiceName })) && rate > 2)
     })

@@ -617,16 +617,22 @@
       for (const type of ["mousedown", "pointerdown", "keydown"]) el.addEventListener(type, event => event.stopPropagation())
     }
 
-    //Ctrl+←/→ while the bar is up (paused too, 2026-10-24): one place slower/faster on the speed list, kept
-    //from the page so the caret doesn't move a word. Only this top page gets the keys: they go to the document
-    //with the focus (an iframe's, the address bar's get none). Ctrl+Shift (selecting words) is left alone
+    //the reading keys while the bar is up, as in the Paseo plugin (2026-10-28, web.ts listenTtsSpeedKeys): while
+    //reading, pause/resume (Ctrl+Space), previous/next (Ctrl+←/→), slower/faster (Ctrl+↓/↑), kept from the page;
+    //while paused only pause/resume, the others go to the page (Ctrl+←/→ moves the caret a word). The keys are
+    //matched exactly, so Ctrl+Shift and Ctrl+Alt are left alone; changed in the options (js/defaults.js
+    //readingKeyList). Only this top page gets them: they go to the document with the focus (an iframe's, the
+    //address bar's get none)
     const onKey = event => {
-      if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey || event.isComposing) return
-      const dir = event.key == "ArrowLeft" ? -1 : event.key == "ArrowRight" ? 1 : 0
-      if (!dir) return
+      if (event.isComposing || !bar.keys) return
+      const action = Object.keys(bar.keys).find(id => keyMatches(bar.keys[id], event))
+      if (!action || bar.state == "PAUSED" && action != "read-pause") return
       event.preventDefault()
       event.stopImmediatePropagation()
-      send({cmd: "stepSpeed", dir})
+      if (action == "read-pause") send({cmd: "togglePause"})
+      else if (action == "read-prev") send({cmd: "rewind"})
+      else if (action == "read-next") send({cmd: "forward"})
+      else send({cmd: "stepSpeed", dir: action == "read-slower" ? -1 : 1})
     }
     window.addEventListener("keydown", onKey, true)
 
@@ -730,6 +736,7 @@
     els.pitchRow.hidden = msg.usesPitch === false
     renderParams(msg.params)
     renderSpeed(msg.speeds, msg.params)
+    if (msg.keys) bar.keys = msg.keys
   }
 
   //the speed list next to the close button (2026-10-24), made again only when the list changes
@@ -745,9 +752,15 @@
     select.value = String(params.rate)
   }
 
-  //1.0x, 0.75x: one decimal unless a second is needed
+  //a reading key ({ctrl, alt, shift, meta, code}, js/page-ui-host.js barKeys) pressed, with no other modifier
+  function keyMatches(key, event) {
+    return !!key && event.code == key.code && event.ctrlKey == key.ctrl && event.altKey == key.alt
+      && event.shiftKey == key.shift && event.metaKey == key.meta
+  }
+
+  //1.0x, 1.3x, 2x, 0.75x: as in the Paseo plugin (web.ts speedLabel)
   function formatSpeed(rate) {
-    return rate.toFixed(Number.isInteger(Math.round(rate * 100) / 10) ? 1 : 2) + "x"
+    return (rate == 1 ? "1.0" : String(rate)) + "x"
   }
 
   function renderParams(params) {
