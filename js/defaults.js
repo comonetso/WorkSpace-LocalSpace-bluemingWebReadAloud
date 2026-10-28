@@ -254,10 +254,16 @@ function readingKeyCombos(saved) {
   return combos
 }
 
+//the '.' added to a line or a paragraph without punctuation (selectionParagraphs, js/speech.js Speech): segments are
+//cut there (CharBreaker sentences) and the highlight replays it (js/page-ui-host.js alignParagraphs). It's marked by an
+//invisible separator before it: the voice isn't given it (js/spoken-text.js leaves it out first), the text it gets ends
+//its lines as the Paseo plugin's does (2026-10-29, LINE_NEEDS_PERIOD: not on a last line, not after Arabic punctuation)
+var ADDED_PERIOD = "⁣."
+
 //a selection read by dragging (js/player.js playText) goes on by paragraphs, a paragraph ending at an empty line
 //as in the Paseo plugin (2026-10-28, thinkingPlayer.ts splitParagraphs; it was every line before). Its lines,
-//spaces around them left out, each get a '.' when they don't end in punctuation, so a heading or a list item isn't
-//read on into the next line. Replayed for the highlight (js/page-ui-host.js alignSegmentsToSource)
+//spaces around them left out, each get a '.' (ADDED_PERIOD) when they don't end in punctuation, so a long paragraph
+//is cut at its lines. Replayed for the highlight (js/page-ui-host.js alignSegmentsToSource)
 var SELECTION_NEEDS_PERIOD = /[^\s.!?,;:…。！？、，；：]$/
 
 //the lines of a selection, with where they start in it and whether an empty line comes before (empty lines left out)
@@ -280,7 +286,7 @@ function selectionLines(text) {
 function selectionParagraphs(text) {
   var paragraphs = []
   selectionLines(text).forEach(function(line) {
-    var said = SELECTION_NEEDS_PERIOD.test(line.text) ? line.text + "." : line.text
+    var said = SELECTION_NEEDS_PERIOD.test(line.text) ? line.text + ADDED_PERIOD : line.text
     if (line.newParagraph) paragraphs.push(said)
     else paragraphs[paragraphs.length - 1] += "\n" + said
   })

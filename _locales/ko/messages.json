@@ -197,6 +197,15 @@
   "selection_button_title": {
     "message": "선택한 글 읽기"
   },
+  "selection_follow_message": {
+    "message": "따라 읽기 할까요?\n이 문단부터 글 끝까지 읽습니다.\n취소하면 이 문단만 읽습니다."
+  },
+  "selection_follow_this_only": {
+    "message": "이 말만 읽기"
+  },
+  "selection_follow_follow": {
+    "message": "따라 읽기"
+  },
   "options_icon_popup": {
     "message": "확장 아이콘 클릭 시 팝업 열기"
   },

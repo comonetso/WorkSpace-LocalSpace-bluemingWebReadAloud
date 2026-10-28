@@ -9,12 +9,13 @@ function Speech(texts, options) {
   //joined to the next before), a page read by its lines (html-doc) all but short ones
   const keepApart = options.splitParagraphs && (options.selection ? "all" : "short")
 
-  //a paragraph gets a '.' at its end so the voice pauses there (line breaks don't make it pause). A selection's lines
+  //a paragraph gets a '.' at its end, segments being cut at sentences (CharBreaker). A selection's lines
   //(splitParagraphs), which may be read together (CharBreaker), get it whenever they don't end in punctuation
-  //whatever the language; other readings only after latin letters, digits or ')'.
+  //whatever the language; other readings only after latin letters, digits or ')'. It's marked (ADDED_PERIOD,
+  //js/defaults.js): the voice isn't given it, its lines end as the Paseo plugin has them (js/spoken-text.js).
   //replayed by alignSegmentsToSource() in js/page-ui-host.js for the selection highlight, keep them in sync
   var needsPeriod = options.splitParagraphs ? /[^\s.!?,;:…。！？、，；：]$/ : /[\w)]$/;
-  for (var i=0; i<texts.length; i++) if (needsPeriod.test(texts[i])) texts[i] += '.';
+  for (var i=0; i<texts.length; i++) if (needsPeriod.test(texts[i])) texts[i] += ADDED_PERIOD;
   //the paragraphs the segments are cut from, for following what the page shows (follow())
   let paras = texts.slice()
   if (texts.length) texts = getChunks(texts.join("\n\n"));
@@ -205,7 +206,7 @@ function Speech(texts, options) {
     }
     pageParas = {keys: page.keys, waiting: page.waiting || [], at: new Map(page.keys.map((key, i) => [key, i]))}
     followVersion++
-    recut(index, page.texts.map(text => needsPeriod.test(text) ? text + "." : text), page.keys)
+    recut(index, page.texts.map(text => needsPeriod.test(text) ? text + ADDED_PERIOD : text), page.keys)
   }
 
   //from the first segment at or after index (and after those begun) that starts a new paragraph. Inside an element
@@ -697,8 +698,8 @@ function Speech(texts, options) {
           if (full) flush();
           group.parts.push(part);
           group.charCount += charCount;
-          //a line's closing '.' isn't counted: Speech() adds one to lines without punctuation
-          if (keepApart) group.spokenBytes += utf8.encode(part.replace(/\s+/g, "").replace(/\.$/, "")).length;
+          //a line's closing '.' isn't counted: Speech() adds one to lines without punctuation (with its mark)
+          if (keepApart) group.spokenBytes += utf8.encode(part.replace(/\s+/g, "").replace(/⁣/g, "").replace(/\.$/, "")).length;
         }
       });
       flush();

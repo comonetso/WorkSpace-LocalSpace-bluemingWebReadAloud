@@ -197,6 +197,15 @@
   "selection_button_title": {
     "message": "Read the selected text"
   },
+  "selection_follow_message": {
+    "message": "Follow along?\nReads from this paragraph to the end of the text.\nCancel reads only this paragraph."
+  },
+  "selection_follow_this_only": {
+    "message": "Read this only"
+  },
+  "selection_follow_follow": {
+    "message": "Follow along"
+  },
   "options_icon_popup": {
     "message": "Clicking the toolbar icon opens the popup"
   },

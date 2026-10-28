@@ -781,10 +781,10 @@ function alignParagraphs(paragraphs, needsPeriod, segTexts) {
     if (step.text != truncateRepeatedChars(original, 3).replace(/https?:\/\/\S+/g, "HTTP URL.")) return null
     let text = step.text
     src = step.src
-    //the '.' added to paragraph ends by Speech() in js/speech.js
+    //the '.' added to paragraph ends by Speech() in js/speech.js, with its mark (ADDED_PERIOD in js/defaults.js)
     if (needsPeriod.test(text)) {
-      text += "."
-      src.push(-1)
+      text += ADDED_PERIOD
+      for (let k = 0; k < ADDED_PERIOD.length; k++) src.push(-1)
     }
     //paragraphs are joined with "\n\n" (Speech() in js/speech.js), a selection's lines in a paragraph with "\n"
     const joiner = paragraphs[i].joiner != null ? paragraphs[i].joiner : i > 0 ? "\n\n" : ""

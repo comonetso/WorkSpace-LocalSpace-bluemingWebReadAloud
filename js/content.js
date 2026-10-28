@@ -55,8 +55,9 @@
         && location.port === "1122"
         && location.protocol === "http:"
         && location.pathname === "/bookshelf/index.html") return  ["js/content/yd-app-web.js"];
-    //readability.js: reader-mode filter for whole-page reading (html-doc.js findArticleElements)
-    else return ["js/readability.js", "js/content/html-doc.js"];
+    //readability.js: reader-mode filter for whole-page reading (html-doc.js findArticleElements); stop-headings.js:
+    //where it stops, before a references section
+    else return ["js/readability.js", "js/stop-headings.js", "js/content/html-doc.js"];
   }
 
   async function getCurrentIndex() {

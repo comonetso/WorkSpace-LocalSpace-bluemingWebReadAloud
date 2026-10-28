@@ -200,19 +200,24 @@ brapi.contextMenus.onClicked.addListener(function(info, tab) {
       .catch(handleHeadlessError)
 })
 
-//the red dot next to selected text (js/selection-button.js): the frame that sent it has the selection
+//the red dot next to selected text (js/selection-button.js): the frame that sent it has the selection.
+//The follow box's answer (js/page-ui.js askFollow) comes from the top page, for the frame it asked about
 brapi.runtime.onMessage.addListener(function(request, sender) {
-  if (request.dest == "readSelection" && sender.tab)
-    readSelectionInTab(sender.tab, sender.frameId, request.text)
+  if (request.dest == "readSelection" && sender.tab) {
+    const follow = request.mode ? {mode: request.mode, ask: request.ask} : null
+    readSelectionInTab(sender.tab, follow ? request.frameId : sender.frameId, request.text, follow)
       .catch(handleHeadlessError)
+  }
 })
 
-async function readSelectionInTab(tab, frameId, fallbackText) {
+async function readSelectionInTab(tab, frameId, fallbackText, follow) {
   const hasTab = tab && tab.id != -1
   const sessionId = newPageUiSessionId()
   //the context menu's info.selectionText has line breaks collapsed: read the selection from the page
   //to keep paragraph breaks (fallbackText is used only when that fails)
-  const captured = hasTab ? await captureSelection(tab.id, frameId, sessionId) : null
+  const captured = hasTab ? await captureSelection(tab.id, frameId, sessionId, follow) : null
+  //a selection inside one paragraph: first asked whether to follow on from it, the answer comes as a message (above)
+  if (captured && captured.ask) return askFollow(tab, frameId, sessionId, captured.text)
   const text = (captured && captured.text) || fallbackText
   const lang = hasTab ? await detectTabLanguage(tab.id) : undefined
   const ui = hasTab ? {
@@ -223,6 +228,31 @@ async function readSelectionInTab(tab, frameId, fallbackText) {
     highlightFrameId: frameId || 0,
   } : null
   return playText(text, {lang: lang, splitParagraphs: true}, ui)
+}
+
+//the follow box (2026-10-29, as in the PC reading app) on the top page, in the middle of the view — the selection
+//may be in one of its frames. Where it can't be shown, what's selected is read, as before
+async function askFollow(tab, frameId, askId, text) {
+  await uiLanguageReady
+  const labels = {
+    message: getMessage("selection_follow_message"),
+    thisOnly: getMessage("selection_follow_this_only"),
+    follow: getMessage("selection_follow_follow"),
+  }
+  try {
+    const top = {tabId: tab.id, frameIds: [0]}
+    await brapi.scripting.executeScript({target: top, files: ["js/page-ui.js"]})
+    const [item] = await brapi.scripting.executeScript({
+      target: top,
+      func: opts => window.__readAloudHrgUi.askFollow(opts),
+      args: [{frameId: frameId || 0, askId, text, labels}],
+    })
+    if (item && item.result) return
+  }
+  catch (err) {
+    console.warn("Cannot show the follow box", err)
+  }
+  return readSelectionInTab(tab, frameId, text, {mode: "selection", ask: askId})
 }
 
 
@@ -364,14 +394,28 @@ function newPageUiSessionId() {
   return Date.now().toString(36) + "." + (++pageUiSessionSeq)
 }
 
-async function captureSelection(tabId, frameId, sessionId) {
+//follow: the follow box's answer for the selection it asked about (js/page-ui.js captureSelection). Following on
+//reads to the end of the article, found by Readability as whole-page reading does (js/page-ui.js articleEnd), or to
+//a references section's heading (js/stop-headings.js)
+async function captureSelection(tabId, frameId, sessionId, follow) {
   try {
     const target = {tabId, frameIds: [frameId || 0]}
+    //without them, to the end of the page
+    if (follow && follow.mode == "follow") {
+      try {
+        const [has] = await brapi.scripting.executeScript({target, func: () => typeof Readability != "undefined"})
+        if (!(has && has.result)) await brapi.scripting.executeScript({target, files: ["js/readability.js"]})
+        await brapi.scripting.executeScript({target, files: ["js/stop-headings.js"]})
+      }
+      catch (err) {
+        console.warn("Cannot load Readability into the page", err)
+      }
+    }
     await brapi.scripting.executeScript({target, files: ["js/page-ui.js"]})
     const [item] = await brapi.scripting.executeScript({
       target,
-      func: id => window.__readAloudHrgUi.captureSelection(id),
-      args: [sessionId],
+      func: (id, follow) => window.__readAloudHrgUi.captureSelection(id, follow),
+      args: [sessionId, follow || null],
     })
     return item && item.result
   }

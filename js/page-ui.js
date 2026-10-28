@@ -21,11 +21,14 @@
   let highlight = null
   let captured = null
   let docSpans = null
+  let asked = null        //the selection a follow box is asking about (captureSelection)
+  let followBox = null
 
   window.__readAloudHrgUi = {
     isAlive,
     destroy,
     captureSelection,
+    askFollow,
     startBar,
     startHighlight,
     docMapChanged,
@@ -44,8 +47,10 @@
   function destroy() {
     removeBar()
     removeHighlight()
+    removeFollowBox()
     captured = null
     docSpans = null
+    asked = null
   }
 
 
@@ -55,17 +60,33 @@
   /**
    * Reads the current selection keeping its line breaks (info.selectionText collapses them)
    * and remembers where each of its characters sits in the DOM, for the highlight.
+   * follow: null the first time. A selection inside one paragraph (no empty line in it: paragraphs as selection
+   * reading splits them, js/defaults.js selectionLines) isn't read then but asked about — {ask: true}, the service
+   * worker shows the follow box (askFollow) — and kept. The box's answer comes back as {ask, mode} for that kept
+   * selection: "follow" reads from the start of its block to the end of the article (or of the page) as it is now,
+   * "this" its whole block, "selection" just what was selected (no box could be shown). Blocks: paragraphRange
    */
-  function captureSelection(sessionId) {
+  function captureSelection(sessionId, follow) {
     captured = null
-    const active = document.activeElement
-    if (active && active.tagName == "TEXTAREA" && typeof active.selectionStart == "number") {
-      return {text: active.value.slice(active.selectionStart, active.selectionEnd).trim(), mappable: false}
+    const kept = follow && asked && asked.id == follow.ask ? asked : null
+    if (follow) asked = null
+    const source = kept || currentSelection()
+    if (!source) return {text: "", mappable: false}
+    const widen = kept && follow.mode != "selection" ? follow.mode : null
+    if (source.textarea) return captureTextarea(sessionId, source, !follow, widen)
+    let range = source.range
+    let text = (kept ? rangeText(range) : window.getSelection().toString()).trim()
+    if (!follow && text && !EMPTY_LINE.test(text)) {
+      asked = {id: sessionId, range}
+      return {text, mappable: false, ask: true}
     }
-    const selection = window.getSelection()
-    if (!selection || !selection.rangeCount) return {text: "", mappable: false}
-    const text = selection.toString().trim()
-    const range = selection.getRangeAt(0).cloneRange()
+    if (widen) {
+      const wide = paragraphRange(range, widen == "follow")
+      if (wide) {
+        range = wide
+        text = blockParagraphs(rangeText(range).trim(), range)
+      }
+    }
     let map = null
     try {
       map = mapTextToNodes(text, range)
@@ -73,8 +94,247 @@
     catch (err) {
       console.error("Blueming Web Read Aloud: cannot map the selection", err)
     }
-    if (map) captured = {sessionId, text, range, released: false, ...map}
+    //selected: what the page shows selected, let go once the highlight shows (releaseSelection)
+    if (map) captured = {sessionId, text, range, selected: source.range, released: false, ...map}
     return {text, mappable: !!map}
+  }
+
+  function currentSelection() {
+    const active = document.activeElement
+    if (active && active.tagName == "TEXTAREA" && typeof active.selectionStart == "number") {
+      return {textarea: active, start: active.selectionStart, end: active.selectionEnd}
+    }
+    const selection = window.getSelection()
+    if (!selection || !selection.rangeCount) return null
+    return {range: selection.getRangeAt(0).cloneRange()}
+  }
+
+  //a text box's selection: its paragraphs found in its value, no highlight
+  function captureTextarea(sessionId, source, ask, widen) {
+    const value = source.textarea.value
+    let start = source.start, end = source.end
+    if (widen) {
+      const from = paragraphStartIn(value.slice(0, end), true)
+      end = widen == "follow" ? value.length : start + paragraphEndIn(value.slice(start), true)
+      start = from
+    }
+    const text = value.slice(start, end).trim()
+    if (ask && text && !EMPTY_LINE.test(text)) {
+      asked = {id: sessionId, ...source}
+      return {text, mappable: false, ask: true}
+    }
+    return {text, mappable: false}
+  }
+
+  //an empty line (spaces in it or not) ends a paragraph, as in js/defaults.js selectionLines
+  const EMPTY_LINE = /\n\s*\n/
+
+  //where the paragraph that the end of text is in starts: after the last empty line with text on both sides —
+  //one at the start or the end of text, with only spaces before or after it, belongs to no paragraph of it.
+  //With none: the start of text when it starts the page (atStart), else -1 (look further back)
+  function paragraphStartIn(text, atStart) {
+    const breaks = /\n\s*\n\s*/g
+    const lead = text.length - text.trimStart().length, content = text.trimEnd().length
+    let at = -1, match
+    while ((match = breaks.exec(text))) {
+      const end = match.index + match[0].length
+      if (match.index > lead && end < content) at = end
+    }
+    return at >= 0 || !atStart ? at : lead
+  }
+
+  //where the paragraph that the start of text is in ends: at the first empty line with text on both sides.
+  //With none: the end of text when it ends the page (atEnd), else -1
+  function paragraphEndIn(text, atEnd) {
+    const breaks = /\s*\n\s*\n/g
+    const lead = text.length - text.trimStart().length, content = text.trimEnd().length
+    let match
+    while ((match = breaks.exec(text))) {
+      if (match.index > lead && match.index + match[0].length < content) return match.index
+    }
+    return atEnd ? content : -1
+  }
+
+  //the selection made larger — the follow box's paragraph is a block of the page (2026-10-29, PC app request f31b2f49:
+  //a caption or a heading right before a paragraph went with it when it was paragraphs at empty lines). From the
+  //start of the block its first character is in, to the end of the article (toEnd: articleEnd) or of the block its
+  //last character is in. The text is then read as any selection, by its paragraphs at empty lines (js/defaults.js
+  //selectionLines). null when the selection has no characters on the page
+  function paragraphRange(range, toEnd) {
+    const doc = range.startContainer.ownerDocument
+    const root = doc.body || doc.documentElement
+    if (!root.contains(range.commonAncestorContainer)) return null
+    const ends = visibleEnds(range)
+    if (!ends) return null
+    const start = blockStart(ends.start.node, ends.start.offset, root)
+    const end = toEnd ? stopAtNotes(start, articleEnd(ends.start.node, start, root), root)
+      : blockEnd(ends.end.node, ends.end.offset, root)
+    const result = document.createRange()
+    result.setStart(start.node, start.offset)
+    result.setEnd(end.node, end.offset)
+    return result
+  }
+
+  //where the first and the last visible character of range are: a selection made by dragging or a triple click
+  //may start at the end of the block before, or end at the start of the next
+  function visibleEnds(range) {
+    const text = rangeText(range)
+    const map = mapTextToNodes(text, range)
+    if (!map) return null
+    let first = -1, last = -1
+    for (let i = 0; i < text.length; i++) {
+      if (map.nodeOf[i] < 0) continue
+      if (first < 0) first = i
+      last = i
+    }
+    if (first < 0) return null
+    const spot = (i, after) => ({node: map.nodes[map.nodeOf[i]].node, offset: map.offsetOf[i] + (after ? 1 : 0)})
+    return {start: spot(first), end: spot(last, true)}
+  }
+
+  //a block: the nearest block-level element around a point — a paragraph, a heading, a list item, a div, a caption,
+  //a table cell — cut where a block inside it comes before the point (blockStart) or after it (blockEnd). A <br>
+  //doesn't cut it: a div of lines is one block
+  function blockStart(container, offset, root) {
+    let parent = container.nodeType == Node.ELEMENT_NODE ? container : container.parentNode
+    let child = container.nodeType == Node.ELEMENT_NODE ? container.childNodes[offset] || null : container
+    for (; parent; child = parent, parent = parent.parentNode) {
+      for (let sib = child ? child.previousSibling : parent.lastChild; sib; sib = sib.previousSibling) {
+        if (isBlock(sib)) return {node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, sib) + 1}
+      }
+      if (parent == root || isBlock(parent)) return {node: parent, offset: 0}
+    }
+    return {node: root, offset: 0}
+  }
+
+  function blockEnd(container, offset, root) {
+    let parent = container.nodeType == Node.ELEMENT_NODE ? container : container.parentNode
+    let child = container.nodeType == Node.ELEMENT_NODE ? container.childNodes[offset - 1] || null : container
+    for (; parent; child = parent, parent = parent.parentNode) {
+      for (let sib = child ? child.nextSibling : parent.firstChild; sib; sib = sib.nextSibling) {
+        if (isBlock(sib)) return {node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, sib)}
+      }
+      if (parent == root || isBlock(parent)) return {node: parent, offset: parent.childNodes.length}
+    }
+    return {node: root, offset: root.childNodes.length}
+  }
+
+  //the box's text read a block at a time (2026-10-29, PC app request 115d2495 — after a heading, a list item or a div
+  //the page gives a single line break, so they went with the next block): a line break between two blocks becomes an
+  //empty line, where a selection's paragraphs are cut (js/defaults.js selectionLines) — the highlight, previous and
+  //next follow. The characters stay matched to the page (mapTextToNodes skips spaces)
+  function blockParagraphs(text, range) {
+    const map = mapTextToNodes(text, range)
+    if (!map) return text
+    const cache = new Map()
+    const blockOf = i => nearestBlock(map.nodes[map.nodeOf[i]].node.parentElement, cache)
+    return text.replace(/\s*\n\s*/g, (run, at) => {
+      const before = at - 1, after = at + run.length
+      if (before < 0 || after >= text.length || map.nodeOf[before] < 0 || map.nodeOf[after] < 0) return run
+      if ((run.match(/\n/g) || []).length >= 2) return run
+      return blockOf(before) == blockOf(after) ? run : "\n\n"
+    })
+  }
+
+  function nearestBlock(elem, cache) {
+    const path = []
+    let block = null
+    for (let e = elem; e; e = e.parentElement) {
+      if (cache.has(e)) {
+        block = cache.get(e)
+        break
+      }
+      path.push(e)
+      if (isBlock(e)) {
+        block = e
+        break
+      }
+    }
+    for (const e of path) cache.set(e, block)
+    return block
+  }
+
+  function isBlock(node) {
+    return node.nodeType == Node.ELEMENT_NODE && !/^(inline|contents|none|ruby|math)/.test(getComputedStyle(node).display)
+  }
+
+  //where following on stops (2026-10-29, PC app request f31b2f49): the end of the page's article — its last block with
+  //text — so a site's references and footer aren't read. The end of the page when the selection isn't in the
+  //article, Readability isn't there or the page doesn't look like an article
+  function articleEnd(startNode, start, root) {
+    const pageEnd = {node: root, offset: root.childNodes.length}
+    try {
+      const article = findArticle()
+      const startElem = startNode.nodeType == Node.ELEMENT_NODE ? startNode : startNode.parentElement
+      if (!article || !article.has(startElem)) return pageEnd
+      const end = {node: article.lastBlock, offset: article.lastBlock.childNodes.length}
+      const from = document.createRange()
+      from.setStart(start.node, start.offset)
+      return from.comparePoint(end.node, end.offset) > 0 ? end : pageEnd
+    }
+    catch (err) {
+      console.error("Blueming Web Read Aloud: cannot find the article", err)
+      return pageEnd
+    }
+  }
+
+  //following on stops before a references section (2026-10-29, PC app request 115d2495 — Readability counts it in the
+  //article): the first heading after the selection with one of the names whole-page reading stops at too
+  //(js/stop-headings.js, put in by the service worker), unless the selection is in such a section already
+  function stopAtNotes(start, end, root) {
+    if (typeof readAloudStopHeadings == "undefined") return end
+    const heading = readAloudStopHeadings.after(start.node, start.offset, root, end)
+    return heading ? {node: heading.parentNode, offset: Array.prototype.indexOf.call(heading.parentNode.childNodes, heading)} : end
+  }
+
+  //the page's article as whole-page reading's reader-mode filter finds it (js/content/html-doc.js
+  //findArticleElements): Mozilla Readability (js/readability.js, put in by the service worker) on a copy of the page,
+  //its elements paired with the page's by their place. has(elem): elem or an element around it is in the article
+  function findArticle() {
+    if (typeof Readability == "undefined" || typeof isProbablyReaderable == "undefined") return null
+    if (!isProbablyReaderable(document)) return null
+    const origEls = document.querySelectorAll("body *")
+    const clone = document.cloneNode(true)
+    const cloneEls = clone.querySelectorAll("body *")
+    if (origEls.length != cloneEls.length) return null
+    for (let i = 0; i < cloneEls.length; i++) cloneEls[i].setAttribute("data-readaloud-i", i)
+    const result = new Readability(clone).parse()
+    if (!result || !result.content) return null
+    const dom = new DOMParser().parseFromString(result.content, "text/html")
+    const places = [...dom.querySelectorAll("[data-readaloud-i]")].map(el => Number(el.getAttribute("data-readaloud-i")))
+    const kept = new Set(places.map(i => origEls[i]).filter(Boolean))
+    //the last block with text: the last of the article in the page's order (places count elements in that order)
+    places.sort((a, b) => b - a)
+    const lastPlace = places.find(i => origEls[i] && isBlock(origEls[i]) && origEls[i].textContent.trim())
+    if (lastPlace == null) return null
+    return {
+      has: elem => {
+        for (let e = elem; e; e = e.parentElement) if (kept.has(e)) return true
+        return false
+      },
+      lastBlock: origEls[lastPlace],
+    }
+  }
+
+  //the text of range as selection.toString() gives it — Range.toString() keeps hidden text and no line breaks:
+  //selected for a moment, then the page's selection is put back
+  function rangeText(range) {
+    const selection = window.getSelection()
+    if (!selection) return range.toString()
+    const before = selection.rangeCount
+      ? [selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset] : null
+    try {
+      selection.removeAllRanges()
+      selection.addRange(range)
+      return selection.toString()
+    }
+    finally {
+      selection.removeAllRanges()
+      try {
+        if (before) selection.setBaseAndExtent(...before)
+      }
+      catch (err) {}
+    }
   }
 
   /**
@@ -191,6 +451,90 @@
 
   function sameChar(a, b) {
     return a == b || a.toLowerCase() == b.toLowerCase()
+  }
+
+
+
+  //follow box -------------------------------------------------------------------
+
+  /**
+   * Reading a selection inside one paragraph asks first whether to follow on (2026-10-29, as in the PC reading
+   * app; looks like the Paseo plugin's confirm box, web.ts confirmBox). Shown on the top page, in the middle of the
+   * view, whichever frame has the selection (opts.frameId). Enter or [Follow along]: from that paragraph (a block of
+   * the page) to the end of the article; [Read this only] or a click outside: that block; Escape reads nothing, and so does the
+   * tab being left (another tab: the PC app closes its box when another window comes up). The answer goes to the
+   * service worker (js/events.js readSelectionInTab), which reads the kept selection from its frame again
+   */
+  function askFollow(opts) {
+    removeFollowBox()
+    const labels = opts.labels || {}
+    const host = document.createElement("readaloud-hrg-follow")
+    host.className = "no-read-aloud"
+    for (const [name, value] of Object.entries({
+      all: "initial", display: "block", position: "fixed", inset: "0", "z-index": "2147483647",
+    })) host.style.setProperty(name, value, "important")
+    const shadow = host.attachShadow({mode: "closed"})
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(FOLLOW_CSS)
+    shadow.adoptedStyleSheets = [sheet]
+
+    const thisOnly = h("button", {type: "button", class: "this"}, [labels.thisOnly || "Read this only"])
+    const follow = h("button", {type: "button", class: "follow"}, [labels.follow || "Follow along"])
+    const back = h("div", {class: "back"}, [
+      h("div", {class: "box", role: "dialog", "aria-modal": "true"}, [
+        h("div", {class: "message"}, [labels.message
+          || "Follow along?\nReads from this paragraph to the end of the text.\nCancel reads only this paragraph."]),
+        h("div", {class: "row"}, [thisOnly, follow]),
+      ]),
+    ])
+    shadow.append(back)
+
+    const choose = mode => {
+      removeFollowBox()
+      if (!mode) return
+      try {
+        brapi.runtime.sendMessage({dest: "readSelection", mode, ask: opts.askId, frameId: opts.frameId || 0, text: opts.text})
+          .catch(() => {})
+      }
+      catch (err) {}
+    }
+    thisOnly.addEventListener("click", () => choose("this"))
+    follow.addEventListener("click", () => choose("follow"))
+    back.addEventListener("click", event => {
+      if (event.target == back) choose("this")
+    })
+    //pressing it must not clear the page's selection, and the page shouldn't react to it
+    for (const type of ["pointerdown", "mousedown"]) {
+      back.addEventListener(type, event => {
+        event.preventDefault()
+        event.stopPropagation()
+      })
+    }
+    const onKey = event => {
+      if (event.isComposing || event.key != "Enter" && event.key != "Escape") return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      choose(event.key == "Enter" ? "follow" : null)
+    }
+    const onHidden = () => {
+      if (document.hidden) choose(null)
+    }
+    window.addEventListener("keydown", onKey, true)
+    document.addEventListener("visibilitychange", onHidden)
+    followBox = {host, onKey, onHidden}
+    //on <html>, not <body>: a transform/filter on body would make "fixed" relative to the body
+    document.documentElement.append(host)
+    follow.focus({preventScroll: true})
+    return true
+  }
+
+  function removeFollowBox() {
+    if (!followBox) return
+    const {host, onKey, onHidden} = followBox
+    followBox = null
+    window.removeEventListener("keydown", onKey, true)
+    document.removeEventListener("visibilitychange", onHidden)
+    host.remove()
   }
 
 
@@ -425,8 +769,9 @@
       const selection = window.getSelection()
       if (!selection || !selection.rangeCount) return
       const current = selection.getRangeAt(0)
-      const same = current.compareBoundaryPoints(Range.START_TO_START, captured.range) == 0
-        && current.compareBoundaryPoints(Range.END_TO_END, captured.range) == 0
+      const selected = captured.selected || captured.range
+      const same = current.compareBoundaryPoints(Range.START_TO_START, selected) == 0
+        && current.compareBoundaryPoints(Range.END_TO_END, selected) == 0
       if (same) selection.removeAllRanges()
     }
     catch (err) {
@@ -1059,6 +1404,58 @@
     }
     @media print {
       .bar { display: none; }
+    }
+  `
+
+  //the Paseo plugin's confirm box values (web.ts confirmBox), as the PC reading app has them
+  const FOLLOW_CSS = `
+    .back {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .box {
+      background: #1f1f23;
+      color: #ececec;
+      border: 1px solid #48484f;
+      border-radius: 10px;
+      padding: 18px 18px 14px;
+      width: min(90vw, 380px);
+      font: 15px/1.55 system-ui, sans-serif;
+      text-align: left;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+    .message {
+      white-space: pre-wrap;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    button {
+      font: inherit;
+      font-size: 14px;
+      margin: 0;
+      padding: 7px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      border: 1px solid #55555c;
+      background: transparent;
+      color: #ddd;
+    }
+    button.follow {
+      border-color: #3b82f6;
+      background: #2563eb;
+      color: #fff;
+    }
+    @media print {
+      .back { display: none; }
     }
   `
 })();

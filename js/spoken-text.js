@@ -24,6 +24,13 @@
 const makeSpokenText = immediate(() => {
   const REPEATED_CHARS_MAX = 3
   const PAUSE = ", "
+  //a line followed by another that doesn't end in a space or punctuation gets a '.', so the voice pauses there (the
+  //Paseo plugin, 2026-10-28 "pause at line ends in all three": a heading or a list item ran on into the next line). The
+  //last line isn't given one: the reading pauses after it anyway. Looked at once the rest is done
+  const LINE_NEEDS_PERIOD = /[^\s.!?,;:…。！？、，；：،؛؟](?=\n)/g
+  //the '.' Speech() and selectionParagraphs() add for cutting and the highlight, marked (js/defaults.js ADDED_PERIOD):
+  //not said — the lines end as LINE_NEEDS_PERIOD has them
+  const ADDED_PERIOD = /⁣\./g
 
   //a table's rule line — a dash or more in each cell, alignment marks (:--, :-:, --:) allowed
   const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/
@@ -114,6 +121,7 @@ const makeSpokenText = immediate(() => {
     let cur = {text, src: Array.from({length: text.length}, (x, i) => i)}
     const edit = (pattern, replacement) => { cur = replaceTracked(cur, pattern, replacement) }
 
+    edit(ADDED_PERIOD, "")
     edit(/^\s*(`{3,}|~{3,})[^\n]*$/gm, "")
     edit(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
     edit(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -156,6 +164,7 @@ const makeSpokenText = immediate(() => {
     edit(/ +\n/g, "\n")
     edit(/\n{3,}/g, "\n\n")
     edit(/^\s+|\s+$/g, "")
+    edit(LINE_NEEDS_PERIOD, "$&.")
 
     const src = cur.src
     return {

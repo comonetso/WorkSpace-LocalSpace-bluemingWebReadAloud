@@ -82,6 +82,8 @@ var readAloudDoc = new function() {
 
     //extract texts, remembering which element each paragraph came from (page highlight)
     readElements = toRead;
+    notesHeading = toRead.length && typeof readAloudStopHeadings != "undefined"
+      ? readAloudStopHeadings.after(toRead[0], 0, document.body) : null;
     var paras = lastParas = extractParas(toRead);
     publishDocMap(paras);
     return paras.map(function(p) {return p.text});
@@ -90,7 +92,7 @@ var readAloudDoc = new function() {
   //the paragraphs of the elements to read, each keyed by its element's place among them and its line in it, so a
   //paragraph is found again when the page rewrites its text (a translator) and the lines before it change
   function extractParas(elements, offset) {
-    return elements.flatMap(function(elem, i) {
+    return beforeNotes(elements.flatMap(function(elem, i) {
       var e = (offset || 0) + i;
       var paras = getParas(elem).filter(function(p) {return p.text});
       //a list's items (one line each): each line is watched for its translation on its own item
@@ -99,7 +101,30 @@ var readAloudDoc = new function() {
       return paras.map(function(p, line) {
         return {text: p.text, elem: p.elem, watch: byItem ? items[line] : p.elem, key: e + ":" + line, elemIndex: e};
       });
-    });
+    }));
+  }
+
+  //whole-page reading stops before a references section (2026-10-29, PC app request fb1fd2d7 — as following on from
+  //a selection does, js/stop-headings.js): the first such heading after the first element read, found when the
+  //reading begins (parse), none when it begins in one. Paragraphs from it on are left out — those of an element
+  //holding it (a page whose article is one element of lines) from its own line on — here, so reading the page again
+  //while reading (refreshTexts) leaves them out too
+  var notesHeading = null;
+
+  function beforeNotes(paras) {
+    if (!notesHeading || !notesHeading.isConnected) return paras;
+    var name = readAloudStopHeadings.key(notesHeading.textContent);
+    var result = [];
+    for (var i = 0; i < paras.length; i++) {
+      var p = paras[i];
+      if (p.elem == notesHeading || p.elem.contains(notesHeading)) {
+        //its line is the heading's: a '.' may have been added to it (addMissingPunctuation)
+        if (readAloudStopHeadings.key(p.text.replace(/\.$/, "")) == name) break;
+      }
+      else if (notesHeading.compareDocumentPosition(p.elem) & Node.DOCUMENT_POSITION_FOLLOWING) break;
+      result.push(p);
+    }
+    return result;
   }
 
   //the elements chosen when the reading began (parse), read again while reading (2026-10-24): what the page
