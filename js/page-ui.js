@@ -80,16 +80,18 @@
       asked = {id: sessionId, range}
       return {text, mappable: false, ask: true}
     }
+    let drop
     if (widen) {
       const wide = paragraphRange(range, widen == "follow")
       if (wide) {
         range = wide
-        text = blockParagraphs(rangeText(range).trim(), range)
+        drop = isPagePart
+        text = blockParagraphs(dropText(rangeText(range).trim(), range, drop), range, drop)
       }
     }
     let map = null
     try {
-      map = mapTextToNodes(text, range)
+      map = mapTextToNodes(text, range, false, drop)
     }
     catch (err) {
       console.error("Blueming Web Read Aloud: cannot map the selection", err)
@@ -222,9 +224,9 @@
   //the box's text read a block at a time (2026-10-29, PC app request 115d2495 — after a heading, a list item or a div
   //the page gives a single line break, so they went with the next block): a line break between two blocks becomes an
   //empty line, where a selection's paragraphs are cut (js/defaults.js selectionLines) — the highlight, previous and
-  //next follow. The characters stay matched to the page (mapTextToNodes skips spaces)
-  function blockParagraphs(text, range) {
-    const map = mapTextToNodes(text, range)
+  //next follow. The characters stay matched to the page (mapTextToNodes skips spaces). drop: as for dropText
+  function blockParagraphs(text, range, drop) {
+    const map = mapTextToNodes(text, range, false, drop)
     if (!map) return text
     const cache = new Map()
     const blockOf = i => nearestBlock(map.nodes[map.nodeOf[i]].node.parentElement, cache)
@@ -233,6 +235,33 @@
       if (before < 0 || after >= text.length || map.nodeOf[before] < 0 || map.nodeOf[after] < 0) return run
       if ((run.match(/\n/g) || []).length >= 2) return run
       return blockOf(before) == blockOf(after) ? run : "\n\n"
+    })
+  }
+
+  //what the box's text leaves out (2026-10-29, PC app request d65b007f): a page's controls and marks between its
+  //paragraphs — a button's label, text hidden from screen readers, a time such as "4:40 PM" under a chat message
+  function isPagePart(textNode) {
+    const parent = textNode.parentElement
+    return !!(parent && parent.closest('button, [role="button"], [aria-hidden="true"], time'))
+  }
+
+  //text without the characters of the text nodes drop leaves out. The spaces around what went become one run with as
+  //many line breaks as the larger of its parts had: a block between two paragraphs leaves their empty line, a line
+  //between two lines of one block a single break
+  function dropText(text, range, drop) {
+    const map = mapTextToNodes(text, range)
+    if (!map) return text
+    let marked = "", dropped = false
+    for (let i = 0; i < text.length; i++) {
+      const gone = map.nodeOf[i] >= 0 && drop(map.nodes[map.nodeOf[i]].node)
+      marked += gone ? "\0" : text[i]
+      if (gone) dropped = true
+    }
+    if (!dropped) return text
+    return marked.replace(/\s*\0[\0\s]*/g, (run, at) => {
+      if (at == 0 || at + run.length == marked.length) return ""
+      const breaks = Math.max(...run.split("\0").map(part => (part.match(/\n/g) || []).length))
+      return breaks ? "\n".repeat(breaks) : /\s/.test(run) ? " " : ""
     })
   }
 
@@ -259,10 +288,10 @@
   }
 
   //where following on stops (2026-10-29, PC app request f31b2f49): the end of the page's article — its last block with
-  //text — so a site's references and footer aren't read. The end of the page when the selection isn't in the
-  //article, Readability isn't there or the page doesn't look like an article
+  //text — so a site's references and footer aren't read. When the selection isn't in the article, Readability isn't
+  //there or the page doesn't look like an article: the end of the box it scrolls in (scrollBoxEnd), else of the page
   function articleEnd(startNode, start, root) {
-    const pageEnd = {node: root, offset: root.childNodes.length}
+    const pageEnd = scrollBoxEnd(startNode, root) || {node: root, offset: root.childNodes.length}
     try {
       const article = findArticle()
       const startElem = startNode.nodeType == Node.ELEMENT_NODE ? startNode : startNode.parentElement
@@ -276,6 +305,23 @@
       console.error("Blueming Web Read Aloud: cannot find the article", err)
       return pageEnd
     }
+  }
+
+  //the end of the box the selection scrolls in (2026-10-29, PC app request d65b007f — on a chat page, which isn't an
+  //article, following on went past the conversation to its side panels and the input box): the nearest element
+  //around it made to scroll up and down, scrolling yet or not (request aee821a6: a short conversation doesn't). One
+  //made to scroll sideways too — a code block, a wide table — is passed by, unless it does scroll up and down: the
+  //browser gives overflow-y:auto alone an overflow-x of auto too, so a conversation box written so looks like a code
+  //block until it scrolls (2026-10-29, chosen by the user). null when it scrolls with the page
+  function scrollBoxEnd(node, root) {
+    const scrolls = value => /^(auto|scroll|overlay)$/.test(value)
+    for (let e = node.nodeType == Node.ELEMENT_NODE ? node : node.parentElement; e && e != root; e = e.parentElement) {
+      const style = getComputedStyle(e)
+      if (scrolls(style.overflowY) && (!scrolls(style.overflowX) || e.scrollHeight > e.clientHeight)) {
+        return {node: e, offset: e.childNodes.length}
+      }
+    }
+    return null
   }
 
   //following on stops before a references section (2026-10-29, PC app request 115d2495 — Readability counts it in the
