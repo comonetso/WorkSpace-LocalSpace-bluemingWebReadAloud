@@ -192,12 +192,13 @@ function retitleContextMenus() {
 
 /**
  * Google voice usage (js/defaults.js googleTtsUsage) to the PC reading app (BluemingReadAloud), which shows the three
- * reading apps' usage added up (2026-11-01, the Claude State Bar request a394753a; the address is proposed to the PC
- * app's conversation, peer_mail 6d7a0993). The whole record goes each time, with an id of this install: each browser
- * has its own copy of the extension, and the app keeps the latest record of each. The app may not be running: what it
- * hasn't received goes again when the record changes or the worker starts.
+ * reading apps' usage added up (2026-11-01, the Claude State Bar request a394753a; the address and body are the PC
+ * app's, peer_mail 423b8e9a). The whole record goes each time, with an id of this install (source): each browser has
+ * its own copy of the extension, and the app keeps the latest record of each. It takes requests from extensions only
+ * (their Origin), so this is sent from the worker. The app may not be running: what it hasn't received goes again
+ * when the record changes or the worker starts.
  */
-const USAGE_BRIDGE_URL = "http://127.0.0.1:51889/v1/usage"
+const USAGE_BRIDGE_URL = "http://127.0.0.1:51888/v1/tts-usage"
 //a stuck app doesn't hold the next sends (Claude's pick, reported to the user)
 const USAGE_BRIDGE_TIMEOUT_MS = 5000
 let usageSending = null
@@ -227,7 +228,7 @@ async function sendGoogleUsage() {
         const res = await fetch(USAGE_BRIDGE_URL, {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({v: 1, app: "web-read-aloud", install, browser: browserName(), updatedAt: new Date().toISOString(), months}),
+          body: JSON.stringify({v: 1, source: install, label: browserName().slice(0, 32) || undefined, months}),
           signal: AbortSignal.timeout(USAGE_BRIDGE_TIMEOUT_MS),
         })
         if (res.ok) await updateSettings({googleTtsUsageSent: record})
