@@ -491,17 +491,14 @@
       .appendTo(additional)
   }
 
-  //the Paseo plugin's Google voices, in its order (shared/presentation/speech.ts FEATURED_GOOGLE_VOICES: Chirp 3 HD,
-  //then WaveNet A and B, $4 a million characters against $30 — the only Korean female ones), each named with its kind,
-  //that price and the characters this extension sent this month, as in the plugin's voice buttons (2026-11-01,
-  //the Claude State Bar request a394753a: to change to a cheaper voice before the free characters run out). The saved
-  //voice, if it's another one that's counted, comes first, as in the plugin (voiceOptions)
-  const FEATURED_GOOGLE_VOICES = ["Zephyr", "Aoede", "Callirrhoe", "Despina", "Kore", "Leda"]
-    .map(name => "GoogleChirp3-HD Korean (" + name + ")")
-    .concat(["GoogleWavenet Korean (Anna)", "GoogleWavenet Korean (Bianca)"])
+  //the Paseo plugin's Google voices (js/defaults.js PASEO_GOOGLE_VOICES: WaveNet A and B are $4 a million characters
+  //against $30), each named with its kind, that price and the characters this extension sent this month, as in the
+  //plugin's voice buttons (2026-11-01, the Claude State Bar request a394753a: to change to a cheaper voice before the
+  //free characters run out). The saved voice, if it's another one that's counted, comes first, as in the plugin
+  //(voiceOptions)
   function featuredGoogleVoices(voices, savedName) {
-    const list = FEATURED_GOOGLE_VOICES.map(name => voices.find(voice => voice.voiceName == name)).filter(Boolean)
-    const saved = savedName && !FEATURED_GOOGLE_VOICES.includes(savedName)
+    const list = PASEO_GOOGLE_VOICES.map(name => voices.find(voice => voice.voiceName == name)).filter(Boolean)
+    const saved = savedName && !PASEO_GOOGLE_VOICES.includes(savedName)
       && voices.find(voice => voice.voiceName == savedName && googleUsageKind(voice))
     return saved ? [saved].concat(list) : list
   }

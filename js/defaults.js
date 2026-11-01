@@ -400,6 +400,14 @@ var GOOGLE_USAGE_KIND_NAMES = {chirp3hd: "Chirp 3 HD", wavenet: "WaveNet"}
 var GOOGLE_USAGE_PRICES = {chirp3hd: 30, wavenet: 4}
 var GOOGLE_USAGE_KEEP_MONTHS = 13
 
+//the Google voices of the Paseo plugin, in its order (shared/presentation/speech.ts FEATURED_GOOGLE_VOICES: Chirp 3 HD,
+//then WaveNet A and B, the only Korean female ones), under this extension's names. With the user's API key these are
+//the only Google voices offered, and the saved one if it's another (2026-11-01, the Claude State Bar request ab424e67,
+//as the plugin's voiceOptions; js/tts-engines.js getVoices); the voices without a key are left as they were
+var PASEO_GOOGLE_VOICES = ["Zephyr", "Aoede", "Callirrhoe", "Despina", "Kore", "Leda"]
+  .map(function(name) { return "GoogleChirp3-HD Korean (" + name + ")" })
+  .concat(["GoogleWavenet Korean (Anna)", "GoogleWavenet Korean (Bianca)"])
+
 //null for the kinds not counted (Standard, Neural2, Studio...: each kind has free characters of its own)
 function googleUsageKind(voice) {
   var matches = /^Google(\S+) /.exec(voice && voice.voiceName || "")

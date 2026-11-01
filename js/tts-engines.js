@@ -424,12 +424,17 @@ function GoogleWavenetTtsEngine() {
     })
   };
   this.getVoices = function() {
-    return getSettings(["wavenetVoices", "gcpCreds"])
+    return getSettings(["wavenetVoices", "gcpCreds", "voiceName"])
       .then(function(items) {
         var creds = items.gcpCreds;
         //the list comes from Google with the API key; without one, the stored list (or the one below) is used
         if (creds && creds.apiKey && (!items.wavenetVoices || Date.now()-items.wavenetVoices[0].ts > 24*3600*1000)) updateVoices(creds.apiKey);
         var listvoices = items.wavenetVoices || voices;
+        //with the key, only the Paseo plugin's voices, and the saved one so that the setting still works
+        //(js/defaults.js PASEO_GOOGLE_VOICES); the whole list stays stored
+        if (creds && creds.apiKey) listvoices = listvoices.filter(function(voice) {
+          return PASEO_GOOGLE_VOICES.includes(voice.voiceName) || voice.voiceName == items.voiceName;
+        });
         return listvoices.filter(
           function(voice) {
             // include all voices or exclude only studio voices.
