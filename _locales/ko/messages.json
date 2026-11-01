@@ -239,6 +239,15 @@
   "options_voice_male": {
     "message": "남"
   },
+  "options_voicegroup_google_featured": {
+    "message": "Google 추천 음성"
+  },
+  "options_voice_price": {
+    "message": "100만 자 $1달러"
+  },
+  "options_voice_usage": {
+    "message": "이번 달 Web Read Aloud $1자"
+  },
   "options_fix_bt_silence_gap": {
     "message": "블루투스 헤드셋에서 단락 첫 몇 단어가 잘리는 문제 보정"
   },

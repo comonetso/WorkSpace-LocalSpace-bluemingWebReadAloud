@@ -53,11 +53,21 @@
     observeSetting("languages"),
     brapi.i18n.getAcceptLanguages().catch(err => { console.error(err); return [] }),
     //the words of the language chosen in the options are loaded first (js/defaults.js getMessage)
-    domReadyPromise.then(() => uiLanguageReady)
+    domReadyPromise.then(() => uiLanguageReady),
+    //the saved voice, another Google voice that's counted, joins the featured ones (featuredGoogleVoices)
+    observeSetting("voiceName")
   ]).pipe(
-    rxjs.tap(([voices, languages, acceptLangs]) => populateVoices(voices, { languages }, acceptLangs)),
+    rxjs.tap(([voices, languages, acceptLangs, , voiceName]) => populateVoices(voices, { languages, voiceName }, acceptLangs)),
     rxjs.share()
   )
+
+  //this month's characters in the featured voices' names, kept up while the page is open
+  rxjs.combineLatest([observeSetting("googleTtsUsage"), voicesPopulatedObservable])
+    .subscribe(([usage]) => {
+      $("#voices option[data-usage-kind]").each(function () {
+        $(this).text(googleVoiceLabel(this.dataset.shortName, this.dataset.usageKind, usage))
+      })
+    })
 
   rxjs.combineLatest([observeSetting("voiceName"), voicesPopulatedObservable])
     .subscribe(([voiceName]) => {
@@ -374,7 +384,10 @@
       $("#status").parent().hide()
     })
 
+  //not the usage the reading itself records (js/defaults.js googleTtsUsage): a voice test would stop at its own count
+  const USAGE_RECORD_KEYS = ["googleTtsUsage", "googleTtsUsageSent", "usageInstallId"]
   settingsChange$
+    .pipe(rxjs.filter(changes => Object.keys(changes).some(key => !USAGE_RECORD_KEYS.includes(key))))
     .subscribe(() => {
       showConfirmation()
       bgPageInvoke("stop").catch(err => "OK")
@@ -415,6 +428,25 @@
         return "standard"
       }))
     for (var name in groups) groups[name].sort(voiceSorter);
+
+    //create the featured Google optgroup, out of the lists below
+    var featured = featuredGoogleVoices(voices, settings.voiceName)
+    if (featured.length) {
+      var google = $("<optgroup>")
+        .attr("label", getMessage("options_voicegroup_google_featured"))
+        .appendTo($("#voices"))
+      featured.forEach(function (voice) {
+        var shortName = googleShortName(voice)
+        var kind = googleUsageKind(voice)
+        $("<option>")
+          .val(voice.voiceName)
+          .attr("data-short-name", shortName)
+          .attr("data-usage-kind", kind)
+          .text(googleVoiceLabel(shortName, kind, null))
+          .appendTo(google)
+      })
+      groups.standard = groups.standard.filter(voice => !featured.includes(voice))
+    }
 
     //create the offline optgroup
     const offline = $("<optgroup>")
@@ -457,6 +489,37 @@
       .val("@custom")
       .text(getMessage("options_enable_custom_voices"))
       .appendTo(additional)
+  }
+
+  //the Paseo plugin's Google voices, in its order (shared/presentation/speech.ts FEATURED_GOOGLE_VOICES: Chirp 3 HD,
+  //then WaveNet A and B, $4 a million characters against $30 — the only Korean female ones), each named with its kind,
+  //that price and the characters this extension sent this month, as in the plugin's voice buttons (2026-11-01,
+  //the Claude State Bar request a394753a: to change to a cheaper voice before the free characters run out). The saved
+  //voice, if it's another one that's counted, comes first, as in the plugin (voiceOptions)
+  const FEATURED_GOOGLE_VOICES = ["Zephyr", "Aoede", "Callirrhoe", "Despina", "Kore", "Leda"]
+    .map(name => "GoogleChirp3-HD Korean (" + name + ")")
+    .concat(["GoogleWavenet Korean (Anna)", "GoogleWavenet Korean (Bianca)"])
+  function featuredGoogleVoices(voices, savedName) {
+    const list = FEATURED_GOOGLE_VOICES.map(name => voices.find(voice => voice.voiceName == name)).filter(Boolean)
+    const saved = savedName && !FEATURED_GOOGLE_VOICES.includes(savedName)
+      && voices.find(voice => voice.voiceName == savedName && googleUsageKind(voice))
+    return saved ? [saved].concat(list) : list
+  }
+
+  //"Zephyr", "Wavenet-A" as in the plugin (the speaker of a one-letter voice is its first letter: tts-engines.js
+  //getAudioUrl); a voice of another language keeps its whole name
+  function googleShortName(voice) {
+    const matches = /^Google(\S+) .* \((\w+)\)$/.exec(voice.voiceName)
+    if (!matches || voice.lang != "ko-KR") return voice.voiceName
+    return matches[1] == "Chirp3-HD" ? matches[2] : matches[1] + "-" + matches[2][0]
+  }
+
+  //"Zephyr · Chirp 3 HD · 100만 자 30달러 (이번 달 Web Read Aloud 12,345자)"
+  function googleVoiceLabel(shortName, kind, usage) {
+    const counts = readGoogleUsage(usage).months[billingMonth()] || {}
+    const chars = String(Math.round(Number(counts[kind]) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+    return shortName + " · " + GOOGLE_USAGE_KIND_NAMES[kind] + " · " + getMessage("options_voice_price", [GOOGLE_USAGE_PRICES[kind]])
+      + " (" + getMessage("options_voice_usage", [chars]) + ")"
   }
 
   function voiceSorter(a, b) {

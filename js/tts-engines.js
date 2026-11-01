@@ -523,6 +523,7 @@ function GoogleWavenetTtsEngine() {
     const voiceType = matches[1];
     const speakerId = voiceType == "Chirp3-HD" ? matches[2] : matches[2][0];
     var endpoint = matches[1] == "Neural2" ? "us-central1-texttospeech.googleapis.com" : "texttospeech.googleapis.com";
+    const usageKind = googleUsageKind(voice);
     return getSettings(["gcpCreds", "gcpToken"])
       .then(function(settings) {
         function synthesize(input) {
@@ -537,7 +538,12 @@ function GoogleWavenetTtsEngine() {
             }
           }
           if (!voiceType.startsWith("Chirp")) postData.audioConfig.pitch = ((pitch || 1) -1) *20;
-          if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json");
+          if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json")
+            .then(function(responseText) {
+              //billed to the user's account: counted (the borrowed token below isn't)
+              if (usageKind) countGoogleUsage(usageKind, "markup" in input ? input.markup : input.text);
+              return responseText;
+            });
           if (!settings.gcpToken) throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
           return ajaxPost("https://cxl-services.appspot.com/proxy?url=https://texttospeech.googleapis.com/v1beta1/text:synthesize&token=" + settings.gcpToken, postData, "json")
             .catch(function(err) {
@@ -558,6 +564,26 @@ function GoogleWavenetTtsEngine() {
         var data = JSON.parse(responseText);
         return "data:audio/ogg;codecs=opus;base64," + data.audioContent;
       })
+  }
+  //this month's characters of a kind (js/defaults.js googleTtsUsage), one write after another: a failure to count
+  //doesn't stop the reading
+  var usageWriting = Promise.resolve();
+  function countGoogleUsage(kind, sent) {
+    var chars = Array.from(sent).length;
+    usageWriting = usageWriting
+      .then(function() {
+        return getSettings(["googleTtsUsage"]);
+      })
+      .then(function(items) {
+        var data = readGoogleUsage(items.googleTtsUsage);
+        var month = billingMonth();
+        var counts = data.months[month] || (data.months[month] = {chirp3hd: 0, wavenet: 0});
+        counts[kind] = (Number(counts[kind]) || 0) + chars;
+        Object.keys(data.months).sort().slice(0, -GOOGLE_USAGE_KEEP_MONTHS).forEach(function(old) { delete data.months[old] });
+        return updateSettings({googleTtsUsage: data});
+      })
+      .catch(console.error);
+    return usageWriting;
   }
   //Korean Chirp 3 HD voices hardly pause at a comma (0.29s: less than between two clauses without one), so a short
   //pause is asked for after each comma of a sentence ("[pause short]" in markup: 0.41s, chosen by ear 2026-09-26),

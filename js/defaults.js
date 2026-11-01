@@ -386,6 +386,36 @@ function isGoogleStudio(voice) {
   return /^Google(Studio) /.test(voice.voiceName);
 }
 
+/**
+ * Characters sent to Google's Text-to-Speech with the user's API key, by billing month and kind (2026-11-01, the
+ * Claude State Bar request a394753a: the Paseo plugin, the PC reading app and this extension share one billing
+ * account's free characters, and the PC app adds the three up). Counted as Google bills them and as the plugin does
+ * (tts.ts countUsage): the input's text or markup of a request that succeeded, spaces, line breaks and pause tags
+ * included, in code points (js/tts-engines.js countGoogleUsage). Stored as googleTtsUsage,
+ * {v: 1, months: {"2026-11": {chirp3hd, wavenet}}}, the last 13 months; sent to the PC app by js/events.js
+ */
+var GOOGLE_USAGE_KINDS = {"Chirp3-HD": "chirp3hd", "Wavenet": "wavenet"}
+var GOOGLE_USAGE_KIND_NAMES = {chirp3hd: "Chirp 3 HD", wavenet: "WaveNet"}
+//dollars a million characters past the free ones (cloud.google.com/text-to-speech/pricing, checked 2026-11-01)
+var GOOGLE_USAGE_PRICES = {chirp3hd: 30, wavenet: 4}
+var GOOGLE_USAGE_KEEP_MONTHS = 13
+
+//null for the kinds not counted (Standard, Neural2, Studio...: each kind has free characters of its own)
+function googleUsageKind(voice) {
+  var matches = /^Google(\S+) /.exec(voice && voice.voiceName || "")
+  return matches && GOOGLE_USAGE_KINDS[matches[1]] || null
+}
+
+//Google's billing month, "2026-11": months turn in US Pacific time (2026-11 from 11-01 16:00 in Korea)
+function billingMonth(now) {
+  var parts = new Intl.DateTimeFormat("en-CA", {timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit"}).formatToParts(now || new Date())
+  return parts.find(function(p) { return p.type == "year" }).value + "-" + parts.find(function(p) { return p.type == "month" }).value
+}
+
+function readGoogleUsage(stored) {
+  return stored && stored.v === 1 && stored.months && typeof stored.months == "object" ? stored : {v: 1, months: {}}
+}
+
 function isIbmWatson(voice) {
   return /^IBM-Watson /.test(voice.voiceName);
 }

@@ -239,6 +239,15 @@
   "options_voice_male": {
     "message": "male"
   },
+  "options_voicegroup_google_featured": {
+    "message": "Featured Google Voices"
+  },
+  "options_voice_price": {
+    "message": "$$$1 per 1M chars"
+  },
+  "options_voice_usage": {
+    "message": "this month, Web Read Aloud $1 chars"
+  },
   "options_fix_bt_silence_gap": {
     "message": "Fix missing first few words of each paragraph when using Bluetooth headset"
   },

@@ -191,6 +191,64 @@ function retitleContextMenus() {
 
 
 /**
+ * Google voice usage (js/defaults.js googleTtsUsage) to the PC reading app (BluemingReadAloud), which shows the three
+ * reading apps' usage added up (2026-11-01, the Claude State Bar request a394753a; the address is proposed to the PC
+ * app's conversation, peer_mail 6d7a0993). The whole record goes each time, with an id of this install: each browser
+ * has its own copy of the extension, and the app keeps the latest record of each. The app may not be running: what it
+ * hasn't received goes again when the record changes or the worker starts.
+ */
+const USAGE_BRIDGE_URL = "http://127.0.0.1:51889/v1/usage"
+//a stuck app doesn't hold the next sends (Claude's pick, reported to the user)
+const USAGE_BRIDGE_TIMEOUT_MS = 5000
+let usageSending = null
+let usageSendAgain = false
+
+brapi.storage.onChanged.addListener(function(changes) {
+  if (changes.googleTtsUsage) sendGoogleUsage()
+})
+sendGoogleUsage()
+
+async function sendGoogleUsage() {
+  if (usageSending) {
+    usageSendAgain = true
+    return
+  }
+  usageSending = (async () => {
+    do {
+      usageSendAgain = false
+      try {
+        const {googleTtsUsage, googleTtsUsageSent, usageInstallId} = await getSettings(["googleTtsUsage", "googleTtsUsageSent", "usageInstallId"])
+        if (!googleTtsUsage) return
+        const months = readGoogleUsage(googleTtsUsage).months
+        const record = JSON.stringify(months)
+        if (record == googleTtsUsageSent) continue
+        const install = usageInstallId || crypto.randomUUID()
+        if (!usageInstallId) await updateSettings({usageInstallId: install})
+        const res = await fetch(USAGE_BRIDGE_URL, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({v: 1, app: "web-read-aloud", install, browser: browserName(), updatedAt: new Date().toISOString(), months}),
+          signal: AbortSignal.timeout(USAGE_BRIDGE_TIMEOUT_MS),
+        })
+        if (res.ok) await updateSettings({googleTtsUsageSent: record})
+      }
+      catch (err) {
+        //the app isn't running (or doesn't answer): sent again later
+      }
+    } while (usageSendAgain)
+  })()
+  await usageSending
+  usageSending = null
+}
+
+//for the PC app to tell the browsers apart: the brand that is neither Chromium nor a made-up one ("Not A Brand")
+function browserName() {
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands || []).map(b => b.brand)
+  return brands.find(b => !/Chromium|Not.?A.?Brand/i.test(b)) || brands.find(b => /Chromium/i.test(b)) || ""
+}
+
+
+/**
  * Context menu handlers
  */
 if (brapi.contextMenus)
