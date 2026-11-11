@@ -546,7 +546,7 @@ function GoogleWavenetTtsEngine() {
           if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json")
             .then(function(responseText) {
               //billed to the user's account: counted (the borrowed token below isn't)
-              if (usageKind) countGoogleUsage(usageKind, "markup" in input ? input.markup : input.text);
+              if (usageKind) countGoogleUsage(usageKind, "markup" in input ? input.markup : input.text, settings.gcpCreds.apiKey);
               return responseText;
             });
           if (!settings.gcpToken) throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
@@ -570,21 +570,17 @@ function GoogleWavenetTtsEngine() {
         return "data:audio/ogg;codecs=opus;base64," + data.audioContent;
       })
   }
-  //this month's characters of a kind (js/defaults.js googleTtsUsage), one write after another: a failure to count
-  //doesn't stop the reading
+  //this month's characters of a kind, and of the key read with (js/defaults.js googleTtsUsage), one write after
+  //another: a failure to count doesn't stop the reading
   var usageWriting = Promise.resolve();
-  function countGoogleUsage(kind, sent) {
+  function countGoogleUsage(kind, sent, apiKey) {
     var chars = Array.from(sent).length;
     usageWriting = usageWriting
       .then(function() {
         return getSettings(["googleTtsUsage"]);
       })
       .then(function(items) {
-        var data = readGoogleUsage(items.googleTtsUsage);
-        var month = billingMonth();
-        var counts = data.months[month] || (data.months[month] = {chirp3hd: 0, wavenet: 0});
-        counts[kind] = (Number(counts[kind]) || 0) + chars;
-        Object.keys(data.months).sort().slice(0, -GOOGLE_USAGE_KEEP_MONTHS).forEach(function(old) { delete data.months[old] });
+        var data = addGoogleUsage(readGoogleUsage(items.googleTtsUsage), billingMonth(), kind, chars, googleUsageKeyMark(apiKey));
         return updateSettings({googleTtsUsage: data});
       })
       .catch(console.error);

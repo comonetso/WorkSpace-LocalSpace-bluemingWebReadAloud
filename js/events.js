@@ -220,15 +220,19 @@ async function sendGoogleUsage() {
       try {
         const {googleTtsUsage, googleTtsUsageSent, usageInstallId} = await getSettings(["googleTtsUsage", "googleTtsUsageSent", "usageInstallId"])
         if (!googleTtsUsage) return
-        const months = readGoogleUsage(googleTtsUsage).months
-        const record = JSON.stringify(months)
+        const usage = readGoogleUsage(googleTtsUsage)
+        const months = usage.months
+        //by key (2026-11-12, the Claude State Bar request 83fb41f9): the Paseo plugin adds them up by key. A record
+        //without keys compares as before, so that it isn't sent again for nothing
+        const keys = usage.keys && typeof usage.keys == "object" && !Array.isArray(usage.keys) ? usage.keys : undefined
+        const record = JSON.stringify(keys ? {months, keys} : months)
         if (record == googleTtsUsageSent) continue
         const install = usageInstallId || crypto.randomUUID()
         if (!usageInstallId) await updateSettings({usageInstallId: install})
         const res = await fetch(USAGE_BRIDGE_URL, {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({v: 1, source: install, label: browserName().slice(0, 32) || undefined, months}),
+          body: JSON.stringify({v: 1, source: install, label: browserName().slice(0, 32) || undefined, months, keys}),
           signal: AbortSignal.timeout(USAGE_BRIDGE_TIMEOUT_MS),
         })
         if (res.ok) await updateSettings({googleTtsUsageSent: record})

@@ -392,7 +392,10 @@ function isGoogleStudio(voice) {
  * account's free characters, and the PC app adds the three up). Counted as Google bills them and as the plugin does
  * (tts.ts countUsage): the input's text or markup of a request that succeeded, spaces, line breaks and pause tags
  * included, in code points (js/tts-engines.js countGoogleUsage). Stored as googleTtsUsage,
- * {v: 1, months: {"2026-11": {chirp3hd, wavenet}}}, the last 13 months; sent to the PC app by js/events.js
+ * {v: 1, months: {"2026-11": {chirp3hd, wavenet}}, keys: {"<key id>": {tail, months: {...}}}}, the last 13 months;
+ * sent to the PC app by js/events.js. keys (2026-11-12, the Claude State Bar request 83fb41f9): the same characters by
+ * the API key they were read with, as the plugin counts its own (tts.ts usageKeyMark): each key goes on adding up to
+ * its own count, on any device
  */
 var GOOGLE_USAGE_KINDS = {"Chirp3-HD": "chirp3hd", "Wavenet": "wavenet"}
 var GOOGLE_USAGE_KIND_NAMES = {chirp3hd: "Chirp 3 HD", wavenet: "WaveNet"}
@@ -418,6 +421,82 @@ function googleUsageKind(voice) {
 function billingMonth(now) {
   var parts = new Intl.DateTimeFormat("en-CA", {timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit"}).formatToParts(now || new Date())
   return parts.find(function(p) { return p.type == "year" }).value + "-" + parts.find(function(p) { return p.type == "month" }).value
+}
+
+//the mark of the API key a count belongs to, as the Paseo plugin makes it (tts.ts usageKeyMark): the first 12 hex
+//digits of the trimmed key's UTF-8 SHA-256, and its last 4 characters. The key itself is neither stored nor sent
+function googleUsageKeyMark(apiKey) {
+  var key = String(apiKey || "").trim()
+  return {id: sha256Hex(key).slice(0, 12), tail: key.slice(-4)}
+}
+
+//SHA-256 of a text's UTF-8, in hex. Not crypto.subtle: it's missing in an insecure context, and the player may be
+//inside an http page (js/events.js injectPlayer)
+function sha256Hex(text) {
+  var rotr = function(x, n) { return (x >>> n) | (x << (32 - n)) }
+  //the first 64 primes' cube roots and the first 8 primes' square roots, their fractions as 32-bit words
+  var k = [], h = []
+  for (var n = 2; k.length < 64; n++) {
+    for (var p = 2; p * p <= n && n % p; p++);
+    if (p * p <= n) continue
+    if (h.length < 8) h.push(Math.pow(n, 1 / 2) * 0x100000000 | 0)
+    k.push(Math.pow(n, 1 / 3) * 0x100000000 | 0)
+  }
+  var bytes = Array.from(new TextEncoder().encode(text))
+  var bits = bytes.length * 8
+  bytes.push(0x80)
+  while (bytes.length % 64 != 56) bytes.push(0)
+  for (var i = 7; i >= 0; i--) bytes.push(i >= 4 ? Math.floor(bits / 0x100000000) >>> (i * 8 - 32) & 255 : bits >>> (i * 8) & 255)
+  for (var off = 0; off < bytes.length; off += 64) {
+    var w = []
+    for (var t = 0; t < 64; t++) {
+      if (t < 16) w[t] = bytes[off + t * 4] << 24 | bytes[off + t * 4 + 1] << 16 | bytes[off + t * 4 + 2] << 8 | bytes[off + t * 4 + 3]
+      else w[t] = (w[t - 16] + (rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ w[t - 15] >>> 3) + w[t - 7]
+        + (rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ w[t - 2] >>> 10)) | 0
+    }
+    var v = h.slice()
+    for (t = 0; t < 64; t++) {
+      var e = v[4], a = v[0]
+      var t1 = (v[7] + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + (e & v[5] ^ ~e & v[6]) + k[t] + w[t]) | 0
+      var t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + (a & v[1] ^ a & v[2] ^ v[1] & v[2])) | 0
+      v = [(t1 + t2) | 0, a, v[1], v[2], (v[3] + t1) | 0, e, v[5], v[6]]
+    }
+    h = h.map(function(x, j) { return (x + v[j]) | 0 })
+  }
+  return h.map(function(x) { return (x >>> 0).toString(16).padStart(8, "0") }).join("")
+}
+
+//adds a successful request's characters to its month, and to the month of the key it was read with (mark, from
+//googleUsageKeyMark). The first time, this month's characters counted before there were keys are moved to that key,
+//as the plugin does with its own file (tts.ts adoptKeys; 2026-11-12 the user's choice); the months before stay out of
+//the keys. The last 13 months are kept, a key without any is dropped. Returns data
+function addGoogleUsage(data, month, kind, chars, mark) {
+  var isRecord = function(x) { return !!x && typeof x == "object" && !Array.isArray(x) }
+  var add = function(months) {
+    var counts = months[month] || (months[month] = {chirp3hd: 0, wavenet: 0})
+    counts[kind] = (Number(counts[kind]) || 0) + chars
+  }
+  var prune = function(months) {
+    Object.keys(months).sort().slice(0, -GOOGLE_USAGE_KEEP_MONTHS).forEach(function(old) { delete months[old] })
+  }
+  if (!isRecord(data.keys)) {
+    data.keys = {}
+    var earlier = data.months[month] || {}
+    var moved = {chirp3hd: Number(earlier.chirp3hd) || 0, wavenet: Number(earlier.wavenet) || 0}
+    if (moved.chirp3hd || moved.wavenet) data.keys[mark.id] = {tail: mark.tail, months: {[month]: moved}}
+  }
+  var entry = isRecord(data.keys[mark.id]) ? data.keys[mark.id] : (data.keys[mark.id] = {})
+  entry.tail = mark.tail
+  if (!isRecord(entry.months)) entry.months = {}
+  add(data.months)
+  add(entry.months)
+  prune(data.months)
+  Object.keys(data.keys).forEach(function(id) {
+    var other = data.keys[id]
+    if (isRecord(other) && isRecord(other.months)) prune(other.months)
+    if (!isRecord(other) || !isRecord(other.months) || !Object.keys(other.months).length) delete data.keys[id]
+  })
+  return data
 }
 
 function readGoogleUsage(stored) {
