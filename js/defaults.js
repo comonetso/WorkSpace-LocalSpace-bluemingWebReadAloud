@@ -808,7 +808,9 @@ if (isExtensionPage()) {
 
 function isExtensionPage() {
   try {
-    return location.origin == new URL(brapi.runtime.getURL("")).origin
+    //the offscreen document (offscreen.html, audio only) is on the extension's origin too but gets no storage API: it
+    //threw on storage.onChanged / storage.local here (the uiLanguage watch, loadUiLanguage, setupDarkMode)
+    return !!brapi.storage && location.origin == new URL(brapi.runtime.getURL("")).origin
   }
   catch (err) {
     return false
@@ -1420,7 +1422,9 @@ function clearClovaVoiceCache() {
   });
 }
 
-// 확장 프로그램 시작 시 캐시 초기화 실행
-clearClovaVoiceCache().catch(error => {
-  console.error("Failed to clear Clova voice cache:", error);
-});
+// 확장 프로그램 시작 시 캐시 초기화 실행 (소리 전용 숨은 문서 offscreen.html 엔 저장소 기능이 없어 건너뜀)
+if (brapi.storage) {
+  clearClovaVoiceCache().catch(error => {
+    console.error("Failed to clear Clova voice cache:", error);
+  });
+}
